@@ -3,7 +3,7 @@ using SharpCompress.Compressors.Deflate;
 using System.IO;
 using Bitter;
 using static Bitter.BinaryUtil;
-
+using System;
 
 namespace FauFau.Util
 {
@@ -106,6 +106,20 @@ namespace FauFau.Util
             }
         }
 
+        public static void UnGzipUnknownTargetSize(BinaryStream source, BinaryStream destination, CompressionLevel level = CompressionLevel.Default, int start = -1, int length = -1)
+        {
+            if (start > 0) { source.ByteOffset = start; }
+            uint l = (uint)(length > 0 ? length : (source.Length - source.ByteOffset));
+
+            using (MemoryStream payload = new MemoryStream(source.Read.ByteArray((int)l)))
+            using (MemoryStream inflated = new MemoryStream())
+            using (GZipStream ds = new GZipStream(payload, CompressionMode.Decompress, level))
+            {
+                ds.CopyTo(inflated);
+                destination.Write.ByteArray(inflated.ToArray());
+            }
+        }
+
         public static void InflateUnknownTargetSize(BinaryStream source, BinaryStream destination, CompressionLevel level = CompressionLevel.Default, int start = -1, int length = -1)
         {
             if (start > 0) { source.ByteOffset = start; }
@@ -129,6 +143,22 @@ namespace FauFau.Util
             using (DeflateStream ds = new DeflateStream(payload, CompressionMode.Compress, level))
             {
                 ds.CopyTo(deflated);
+                destination.Write.ByteArray(deflated.ToArray());
+            }
+        }
+
+        public static void Gzip(BinaryStream source, BinaryStream destination, CompressionLevel level = CompressionLevel.Default, int start = -1, int length = -1)
+        {
+            if (start > 0) { source.ByteOffset = start; }
+            uint l = (uint)(length > 0 ? length : (source.Length - source.ByteOffset));
+
+            byte[] payload = source.Read.ByteArray((int)l);
+
+            using (MemoryStream deflated = new MemoryStream())
+            using (GZipStream ds = new GZipStream(deflated, CompressionMode.Compress, level))
+            {
+                Console.WriteLine(l);
+                ds.Write(payload, 0, payload.Length);
                 destination.Write.ByteArray(deflated.ToArray());
             }
         }
