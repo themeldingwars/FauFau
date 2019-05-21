@@ -1,3 +1,6 @@
 [submodule "FauFau/Lib/Bitter"]
 	path = FauFau/Lib/Bitter
 	url = https://github.com/freakbyte/Bitter.git
+[submodule "FauFau/Lib/PatternFinder"]
+	path = FauFau/Lib/PatternFinder
+	url = https://github.com/mrexodia/PatternFinder.git
