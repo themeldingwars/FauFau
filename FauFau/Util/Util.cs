@@ -154,12 +154,13 @@ namespace FauFau.Util
 
             byte[] payload = source.Read.ByteArray((int)l);
 
-            using (MemoryStream deflated = new MemoryStream())
-            using (GZipStream ds = new GZipStream(deflated, CompressionMode.Compress, level))
+            using (MemoryStream memory = new MemoryStream())
             {
-                Console.WriteLine(l);
-                ds.Write(payload, 0, payload.Length);
-                destination.Write.ByteArray(deflated.ToArray());
+                using (GZipStream gzip = new GZipStream(memory, CompressionMode.Compress, level))
+                {
+                    gzip.Write(payload, 0, payload.Length);
+                }
+                destination.Write.ByteArray(memory.ToArray());
             }
         }
 
