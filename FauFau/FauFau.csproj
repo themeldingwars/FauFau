@@ -51,7 +51,6 @@
 
   <ItemGroup>
     <ProjectReference Include="Lib\Bitter\Bitter\Bitter.csproj" />
-    <ProjectReference Include="Lib\PatternFinder\PatternFinder\PatternFinder.csproj" />
   </ItemGroup>
 
 </Project>
