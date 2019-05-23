@@ -10,7 +10,7 @@ using Bitter;
 using FauFau.Util;
 using FauFau.Util.CommmonDataTypes;
 using static Bitter.BinaryUtil;
-using static FauFau.Util.Util;
+using static FauFau.Util.Common;
 
 namespace FauFau.Formats
 {

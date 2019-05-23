@@ -7,8 +7,14 @@ using System;
 
 namespace FauFau.Util
 {
-    public static class Util
+    public static class Common
     {
+
+        public static readonly string BaseAppDataPath = Path.Combine(Environment.ExpandEnvironmentVariables(@"%LocalAppData%"), "TheMeldingWars");
+        public static string AppDataPath(string project)
+        {
+            return Path.Combine(BaseAppDataPath, project);
+        }
 
         public static void MTXor(uint seed, ref byte[] data)
         {

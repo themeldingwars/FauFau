@@ -1,5 +1,5 @@
 ﻿using Bitter;
-using static FauFau.Util.Util;
+using static FauFau.Util.Common;
 using FauFau.Util.CommmonDataTypes;
 using SharpCompress.Compressors.Deflate;
 using System;

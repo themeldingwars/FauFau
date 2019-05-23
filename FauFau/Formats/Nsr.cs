@@ -30,7 +30,7 @@ namespace FauFau.Formats
                 {                
                     try
                     {
-                        Util.Util.UnGzipUnknownTargetSize(bs, payload);
+                        Util.Common.UnGzipUnknownTargetSize(bs, payload);
                         Compressed = true;
                     }
                     catch
@@ -95,7 +95,7 @@ namespace FauFau.Formats
                 if (Compressed)
                 {
                     // compress with gzip
-                    Util.Util.Gzip(payload, bs);
+                    Util.Common.Gzip(payload, bs);
                 }
                 else
                 {
