@@ -7,7 +7,7 @@ namespace FauFau.Util
 
     public static class Math
     {
-        static double Map(double fromStart, double fromEnd, double toStart, double toEnd, double value)
+        public static double Map(double fromStart, double fromEnd, double toStart, double toEnd, double value)
         {
             return toStart + (value - fromStart) * (toEnd - toStart) / (fromEnd - fromStart);
         }
