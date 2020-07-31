@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FauFau", "FauFau\FauFau.csp
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Bitter", "FauFau\Lib\Bitter\Bitter\Bitter.csproj", "{0499A152-4BE5-4180-B4C3-69150EE422A5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{4679303C-FF91-4986-8801-AA3C9E9DBCEC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{0499A152-4BE5-4180-B4C3-69150EE422A5}.Release|x64.Build.0 = Release|Any CPU
 		{0499A152-4BE5-4180-B4C3-69150EE422A5}.Release|x86.ActiveCfg = Release|Any CPU
 		{0499A152-4BE5-4180-B4C3-69150EE422A5}.Release|x86.Build.0 = Release|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Debug|x64.Build.0 = Debug|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Debug|x86.Build.0 = Debug|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Release|x64.ActiveCfg = Release|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Release|x64.Build.0 = Release|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Release|x86.ActiveCfg = Release|Any CPU
+		{4679303C-FF91-4986-8801-AA3C9E9DBCEC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
