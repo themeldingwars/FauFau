@@ -1,0 +1,41 @@
+name: Build and Publish Package
+on: [ push, pull_request ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: Build .Net core lib
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.1.301
+    - name: Install dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+    - name: Nuget Package
+      run: dotnet pack --configuration Release
+    - uses: actions/upload-artifact@v2
+      with:
+        name: nugetPackage
+        path: '/home/runner/work/FauFau/FauFau/FauFau/bin/Release/FauFau**.nupkg'
+
+  nuget:
+    needs: [build]
+    runs-on: ubuntu-latest
+    
+    if: ${{ github.ref == 'refs/heads/master' }}
+    steps:
+      - uses: actions/download-artifact@master
+        with:
+          name: nugetPackage
+      - uses: tanaka-takayoshi/nuget-publish-to-github-packages-action@v2.1
+        with:
+          nupkg-path:  '*.nupkg'
+          repo-owner:  ${{ github.repository_owner }}
+          gh-user:  ${{ github.actor }}
+          token:  ${{ secrets.GITHUB_TOKEN }}
