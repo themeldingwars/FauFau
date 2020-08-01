@@ -24,7 +24,7 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
     
-    if: ${{ github.ref == 'actionsSetup' }}
+    if: ${{ github.ref == 'refs/heads/actionsSetup' }}
     steps:
       - uses: tanaka-takayoshi/nuget-publish-to-github-packages-action@v2.1
         with:
