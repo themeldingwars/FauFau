@@ -1,10 +1,8 @@
-name: Build .Net core test
-
+name: Test build
 on: [ push, pull_request ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -19,3 +17,19 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --configuration Release --no-restore
+    - name: Nuget Package
+      run: dotnet pack --configuration Release
+
+  nuget:
+    needs: [build]
+    runs-on: ubuntu-latest
+    
+    if: ${{ github.ref == 'master' }}
+    steps:
+      - name: Publish
+      - uses: tanaka-takayoshi/nuget-publish-to-github-packages-action@v2.1
+        with:
+          nupkg-path:  '/home/runner/work/FauFau/FauFau/FauFau/bin/Release/FauFau*.nupkg'
+          repo-owner:  ${{ github.repository_owner }}
+          gh-user:  ${{ github.actor }}
+          token:  ${{ secrets.GITHUB_TOKEN }}
