@@ -26,7 +26,6 @@ jobs:
     
     if: ${{ github.ref == 'master' }}
     steps:
-      - name: Publish
       - uses: tanaka-takayoshi/nuget-publish-to-github-packages-action@v2.1
         with:
           nupkg-path:  '/home/runner/work/FauFau/FauFau/FauFau/bin/Release/FauFau*.nupkg'
