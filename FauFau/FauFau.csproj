@@ -5,6 +5,9 @@
     <Platforms>AnyCPU;x86;x64</Platforms>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
+    <PackageVersion>1.1.0</PackageVersion>
+    <AssemblyVersion>1.1.0</AssemblyVersion>
+    <FileVersion>1.1.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
