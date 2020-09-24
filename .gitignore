@@ -1,5 +1,7 @@
 FauFau/[Bb]in/
 FauFau/[Oo]bj/
+Tests/[Bb]in/
+Tests/[Oo]bj/
 packages/
 .vs/
 *.suo

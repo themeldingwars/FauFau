@@ -4,6 +4,7 @@ using System.IO;
 using Bitter;
 using static Bitter.BinaryUtil;
 using System;
+using System.Buffers;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Runtime.Serialization.Json;
@@ -286,6 +287,27 @@ namespace FauFau.Util
                 }
                 Directory.Delete(path);
             }
+        }
+
+        public static ReadOnlySpan<char> BytesToHexString(ReadOnlySpan<byte> hexBytes, bool upperCase = true)
+        {
+            int length = hexBytes.Length * 2;
+
+            var str = string.Create(length, (length, hexBytes.ToArray(), upperCase), (chars, state) =>
+            {
+                const string HEX_VALUES       = "0123456789ABCDEF";
+                const string HEX_VALUES_LOWER = "0123456789abcdef";
+                var          values           = state.upperCase ? HEX_VALUES.AsSpan() : HEX_VALUES_LOWER.AsSpan();
+
+                int srcIdx = 0;
+                for (int i = 0; i < state.length; i += 2) {
+                    chars[i]     = values[state.Item2[srcIdx] >> 4];
+                    chars[i + 1] = values[state.Item2[srcIdx] & 0xF];
+                    srcIdx++;
+                }
+            });
+            
+            return str.AsSpan();
         }
 
     }
