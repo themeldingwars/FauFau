@@ -1,4 +1,8 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+using FauFau.Net.Web;
 
 namespace Tests
 {
@@ -8,7 +12,13 @@ namespace Tests
         {
             //Red5SigTests.Test1();
             
-            GtChunksTests.TestLoad();
+            //GtChunksTests.TestLoad();
+
+            //AuthTests.VerifyBench();
+            
+            //AuthTests.SecretBench();
+            
+            AuthTests.UserIdBench();
         }
     }
 }
