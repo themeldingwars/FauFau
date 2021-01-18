@@ -309,6 +309,35 @@ namespace FauFau.Util
             
             return str.AsSpan();
         }
+        
+        public static char[] BytesToHexChars(ReadOnlySpan<byte> hexBytes, bool upperCase = true)
+        {
+            ReadOnlySpan<char> values = upperCase ? "0123456789ABCDEF" : "0123456789abcdef";
+            char[] ret = new char[hexBytes.Length * 2];
+            
+            for (int i = 0; i < hexBytes.Length; i++)
+            {
+                ret[i*2]     = values[hexBytes[i] >> 4];
+                ret[(i*2)+1] = values[hexBytes[i] & 0xF];
+            }
+            return ret;
+        }
+        
+        public static bool TryWriteBytesAsHex(ReadOnlySpan<byte> input, Span<char> output, bool upperCase = true)
+        {
+            if (output.Length < input.Length * 2)
+                return false;
+            
+            ReadOnlySpan<char> values = upperCase ? "0123456789ABCDEF" : "0123456789abcdef";
 
+            for (int i = 0; i < input.Length; i++)
+            {
+                output[i*2]     = values[input[i] >> 4];
+                output[(i*2)+1] = values[input[i] & 0xF];
+            }
+
+            return true;
+        }
+        
     }
 }
