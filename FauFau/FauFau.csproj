@@ -7,8 +7,10 @@
     <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
     <PackageVersion>1.1.0</PackageVersion>
     <AssemblyVersion>1.1.0</AssemblyVersion>
+    <Version>1.1.0</Version>
     <FileVersion>1.1.0</FileVersion>
     <LangVersion>9</LangVersion>
+    <Authors>TheMeldingWars</Authors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

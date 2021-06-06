@@ -1,0 +1,32 @@
+name: Build and publish
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+            
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 5.0.x
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Publish FauCap nuget
+        uses: rohith/publish-nuget@v2
+        if: github.event_name != 'pull_request'
+        with:
+          PROJECT_FILE_PATH: FauFau/FauFau.csproj
+          PACKAGE_NAME: FauFau
+          NUGET_KEY: ${{secrets.TMW_NUGET}}
