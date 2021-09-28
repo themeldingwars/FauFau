@@ -80,6 +80,9 @@ fabric.properties
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Jet Brains
+.idea/*
+
 # User-specific files
 *.rsuser
 *.suo

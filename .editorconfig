@@ -1,0 +1,37 @@
+
+[*]
+
+# Microsoft .NET properties
+csharp_preserve_single_line_blocks = true
+
+# ReSharper properties
+resharper_align_first_arg_by_paren = false
+resharper_align_multiline_calls_chain = true
+resharper_align_multiline_parameter = true
+resharper_blank_lines_after_block_statements = 0
+resharper_blank_lines_around_block_case_section = 1
+resharper_blank_lines_around_property = 0
+resharper_blank_lines_around_single_line_type = 0
+resharper_csharp_blank_lines_around_field = 0
+resharper_csharp_blank_lines_around_invocable = 0
+resharper_csharp_blank_lines_around_region = 0
+resharper_csharp_blank_lines_around_type = 0
+resharper_csharp_blank_lines_inside_region = 0
+resharper_csharp_insert_final_newline = true
+resharper_csharp_int_align_comments = true
+resharper_csharp_keep_blank_lines_in_code = 100
+resharper_csharp_keep_blank_lines_in_declarations = 100
+resharper_csharp_max_line_length = 339
+resharper_indent_preprocessor_if = usual_indent
+resharper_indent_preprocessor_region = do_not_change
+resharper_int_align_parameters = true
+resharper_keep_existing_attribute_arrangement = true
+resharper_keep_existing_enum_arrangement = false
+resharper_place_accessorholder_attribute_on_same_line = false
+resharper_place_expr_accessor_on_single_line = true
+resharper_place_expr_property_on_single_line = true
+resharper_place_simple_embedded_statement_on_same_line = false
+resharper_place_type_constraints_on_same_line = true
+resharper_remove_blank_lines_near_braces_in_code = false
+resharper_remove_blank_lines_near_braces_in_declarations = false
+resharper_space_before_new_parentheses = true
