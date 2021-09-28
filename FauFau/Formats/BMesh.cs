@@ -14,7 +14,7 @@ namespace FauFau.Formats
         {
             if(bs.Length < 7 || !bs.Read.String(5).Equals("bMesh"))
             {
-                throw new Exception("uh oh, this dosnt seem to be a bMesh file?");
+                throw new Exception("uh oh, this doesn't seem to be a bMesh file?");
             }
 
             ushort version = bs.Read.UShort();
@@ -26,7 +26,7 @@ namespace FauFau.Formats
                     ReadBMesh32(bs);
                     break;
                 default:
-                    throw new Exception("uh oh, i dont know how to parse bMesh version " + version);
+                    throw new Exception("uh oh, I don't know how to parse bMesh version " + version);
             }
         }
         public override void Write(BinaryStream bs)

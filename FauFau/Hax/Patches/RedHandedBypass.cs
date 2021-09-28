@@ -8,7 +8,7 @@ namespace FauFau.Hax.Patches
         public override string Desc => "Bypasses the Red handed service, this was preventing the game from launching on some systems now";
         private const byte NOP      = 0x90;
 
-        // This is a bad translation of the redhanded bypass, most likey will only work for the latest client version
+        // This is a bad translation of the redhanded bypass, most likely will only work for the latest client version
         // Prob would have been just as well hardcoding the offsets >,>
         // Ah well will do for now, can try and work out the offset from function sigs later
         public override PatchResult Apply(Patcher Patchy)

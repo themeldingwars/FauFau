@@ -93,7 +93,7 @@ namespace FauFau.Formats
             bs.Write.Int(Vertices.Count);
             bs.Write.TypeList(Vertices);
 
-            Write.UInt(0); // aint nobody got time for vertex lod positions
+            Write.UInt(0); // ain't nobody got time for vertex lod positions
 
             bs.Write.Int(Normals.Count);
             Write.TypeList(Normals);

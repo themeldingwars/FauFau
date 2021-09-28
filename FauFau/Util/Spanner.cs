@@ -21,7 +21,7 @@ namespace FauFau.Util
             Offset      = 0;
         }
 
-        // Get a span untill the value is matches, if the value isn't matched will return until the end of the buffer span
+        // Get a span until the value is matches, if the value isn't matched will return until the end of the buffer span
         public ReadOnlySpan<T> ReadUntil(T Value)
         {
             var len = CurrentView.IndexOf(Value);

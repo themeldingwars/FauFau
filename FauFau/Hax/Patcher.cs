@@ -10,7 +10,7 @@ using PatchedStore = System.Collections.Generic.Dictionary<string, FauFau.Hax.Pa
 
 namespace FauFau.Hax
 {
-    // A class for applying and mangine patches on the Firefall client exe across multiple versions
+    // A class for applying and managing patches on the Firefall client exe across multiple versions
     public class Patcher
     {
         public string Path                  = null;

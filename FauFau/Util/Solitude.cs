@@ -27,13 +27,13 @@ namespace FauFau.Util
             this.name = name;
             this.cmdHandler = commandHandler;
 
-            // try to open existing mutex, if it dosn't we create a new globally accessible one
+            // try to open existing mutex, if it doesn't we create a new globally accessible one
             if (!Mutex.TryOpenExisting(name + ".mutex", out mutex))
             {
                 mutex = new Mutex(false, name + ".mutex", out createdNew);
             }
 
-            // try to aquire the mutex
+            // try to acquire the mutex
             try
             {
                 // wait half a second in case the mutex is contended
@@ -41,7 +41,7 @@ namespace FauFau.Util
             }
             catch (AbandonedMutexException)
             {
-                // try to reaquire abandoned mutex
+                // try to reacquire abandoned mutex
                 mutex.ReleaseMutex();
                 aquiredMutex = mutex.WaitOne();
             }
