@@ -18,7 +18,7 @@ namespace FauFau.Net.Web
         private const string USER_AUTH_SALT        = @"-red5salt-7nc9bsj4j734ughb8r8dhb8938h8by987c4f7h47b";
         private const int    VERSION               = 2;
 
-        private static readonly SHA1Managed Sha1Hasher = new SHA1Managed();
+        private static readonly SHA1 Sha1Hasher = SHA1.Create();
 
         // Values used in the header
         public ref struct QsValues

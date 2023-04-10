@@ -49,10 +49,9 @@ namespace Tests
             private const string USER_AUTH_SALT = @"-red5salt-7nc9bsj4j734ughb8r8dhb8938h8by987c4f7h47b";
             private const string userEmail = @"gdsgsdg@test.com";
             private const string userPassword = @"dgdssdgsdgsgfgdfg";
-            private static readonly SHA1Managed Sha1Hasher = new SHA1Managed();
+            private static readonly SHA1 Sha1Hasher = SHA1.Create();
 
-            private static byte[] hexBytes =
-                Encoding.UTF8.GetBytes("fhgfhfghfghfgdfkljdfkgdjkl,sdjfksehfnsdjfnsdkjfhnsdjkfdsfjsdhfgjsdjkgds");
+            private static byte[] hexBytes = Encoding.UTF8.GetBytes("fhgfhfghfghfgdfkljdfkgdjkl,sdjfksehfnsdjfnsdkjfhnsdjkfdsfjsdhfgjsdjkgds");
 
             [Benchmark]
             public Red5Sig.QsValues Version1()
@@ -83,14 +82,14 @@ namespace Tests
             }
             
             [Benchmark]
-            public ReadOnlySpan<char> GenrateUserId()
+            public ReadOnlySpan<char> GenerateUserId()
             {
                 var result = Red5Sig.GenerateUserId(userEmail);
                 return result;
             }
             
             [Benchmark]
-            public ReadOnlySpan<char> GenrateUserId2()
+            public ReadOnlySpan<char> GenerateUserId2()
             {
                 Span<char> preHashed = stackalloc char[userEmail.Length + USER_ID_SALT.Length];
                 userEmail.AsSpan().CopyTo(preHashed);
@@ -102,7 +101,7 @@ namespace Tests
             }
             
             [Benchmark]
-            public ReadOnlySpan<char> GenrateSecert()
+            public ReadOnlySpan<char> GenerateSecret()
             {
                 var secert1 = Red5Sig.GenerateSecret(userEmail, userPassword);
                 return secert1;
