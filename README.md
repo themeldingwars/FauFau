@@ -17,3 +17,5 @@ git clone https://github.com/themeldingwars/FauFau.git
 cd FauFau
 git submodule update --init --recursive
 ```
+
+Library is automatically published to NuGet: https://www.nuget.org/packages/FauFau
