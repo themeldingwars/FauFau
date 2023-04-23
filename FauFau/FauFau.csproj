@@ -5,9 +5,9 @@
     <Platforms>AnyCPU;x86;x64</Platforms>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
-    <PackageVersion>1.2.0</PackageVersion>
+    <PackageVersion>1.2.1</PackageVersion>
     <AssemblyVersion>1.2.1</AssemblyVersion>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <FileVersion>1.2.1</FileVersion>
     <LangVersion>9</LangVersion>
     <Authors>TheMeldingWars</Authors>
