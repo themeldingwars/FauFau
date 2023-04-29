@@ -68,7 +68,6 @@ namespace FauFau.Formats
             // uint inflated size
             // uint padding
             // ushort 0x78 0x01 zlib deflate low/no compression  
-
             uint inflatedSize = UIntFromBufferLE(ref data);
             ushort ds = UShortFromBufferLE(ref data, 8);
 
@@ -358,11 +357,85 @@ namespace FauFau.Formats
         }
         public override void Write(BinaryStream bs)
         {
+            // Doing this for debugging purposes
+            MemoryStream memory_header     = new MemoryStream();
+            MemoryStream memory_info       = new MemoryStream();
+            MemoryStream memory_rows       = new MemoryStream();
+            MemoryStream memory_data       = new MemoryStream();
+            MemoryStream memory_inflated   = new MemoryStream();
+            MemoryStream memory_deflated   = new MemoryStream();
+            MemoryStream memory_obfuscated = new MemoryStream();
+            BinaryStream header_bs         = new BinaryStream(memory_header);
+            BinaryStream info_bs           = new BinaryStream(memory_info);
+            BinaryStream rows_bs           = new BinaryStream(memory_rows);
+            BinaryStream data_bs           = new BinaryStream(memory_data);
+            BinaryStream inflated_bs       = new BinaryStream(memory_inflated);
+            BinaryStream deflated_bs       = new BinaryStream(memory_deflated);
+            BinaryStream obfuscated_bs     = new BinaryStream(memory_obfuscated);
 
-            // build data section
-            int qq = 0;
-            int rr = 0;
-            HashSet<string> has = new HashSet<string>();
+            // === Regenerate info structures ==
+            Console.WriteLine("=== Regenerate info structures ===");
+            int numberOfTables = Tables.Count;
+            TableInfo[] tableInfos = new TableInfo[numberOfTables];
+            FieldInfo[][] fieldInfos = new FieldInfo[numberOfTables][];
+            RowInfo[] rowInfos = new RowInfo[numberOfTables];
+            for (ushort i = 0; i < numberOfTables; i++)
+            {
+                Table table = Tables[i];
+
+                // FieldInfo
+                FieldInfo[] gen_fieldInfo = new FieldInfo[table.Columns.Count];
+                int currentWidth = 0;
+                for (int x = 0; x < table.Columns.Count; x++) {
+                    gen_fieldInfo[x] = new FieldInfo();
+                    Column column = table.Columns[x];
+                    gen_fieldInfo[x].id = column.Id;
+                    gen_fieldInfo[x].type = (byte) column.Type;
+
+                    // nullableIndex
+                    if (table.IsColumnNullable(column)) {
+                        gen_fieldInfo[x].nullableIndex = (byte) table.NullableColumn.IndexOf(column);
+                    }
+                    else {
+                        gen_fieldInfo[x].nullableIndex = 255;
+                    }
+
+                    // start
+                    if (column.Padding > 0) {
+                        currentWidth += column.Padding;
+                    }
+                    gen_fieldInfo[x].start = (ushort) currentWidth;
+                    currentWidth += DBTypeLength(column.Type);
+                }
+
+                // TableInfo
+                TableInfo   gen_tableInfo = new TableInfo();
+                gen_tableInfo.id = table.Id;
+                gen_tableInfo.numFields = (ushort) table.Columns.Count;
+                gen_tableInfo.nullableBitfields = table.NullableColumn.Count > 0 ? (byte) System.Math.Ceiling((double)table.NullableColumn.Count/8) : (byte) 0;
+                gen_tableInfo.numUsedBytes = (ushort) currentWidth;
+                int mustBeDivisableBy4 = 4;
+                gen_tableInfo.numBytes = (ushort) FindClosestLargerNumber(gen_tableInfo.numUsedBytes + gen_tableInfo.nullableBitfields, mustBeDivisableBy4);
+
+                // RowInfo
+                RowInfo gen_rowInfo = new RowInfo();
+                gen_rowInfo.rowCount = (uint) table.Rows.Count;
+                gen_rowInfo.rowOffset = 0; // This is updated later, when we generate the data.
+                
+                // Assign
+                tableInfos[i] = gen_tableInfo;
+                fieldInfos[i] = gen_fieldInfo;
+                rowInfos[i] = gen_rowInfo;
+            }
+
+            // === Data ===
+            Console.WriteLine("=== Data ===");
+            int GetHashCode(byte[] val)
+            {            
+                var str = Convert.ToBase64String(val);
+                return str.GetHashCode();          
+            }
+            Dictionary<int, uint> uniqueDataObjectKeys = new Dictionary<int, uint>();
 
             for (int tn = 0; tn < Tables.Count; tn++)
             {
@@ -370,43 +443,236 @@ namespace FauFau.Formats
                 for (int fn = 0; fn < table.Columns.Count; fn++)
                 {
                     Column field = table.Columns[fn];
-
-                    switch (field.Type)
-                    {
-                        case DBType.String:
-                        case DBType.Blob:
-                        case DBType.ByteArray:
-                        case DBType.UShortArray:
-                        case DBType.UIntArray:
-                        case DBType.Vector2Array:
-                        case DBType.Vector3Array:
-                        case DBType.Vector4Array:
-
-                            for (int rn = 0; rn < table.Rows.Count; rn++)
+                    if (IsDataType(field.Type)) {
+                        for (int rn = 0; rn < table.Rows.Count; rn++)
+                        {
+                            Row row = table[rn];
+                            object obj = row[fn];
+                            if (obj != null)
                             {
-                                Row row = table[rn];
-                                if (row[fn] == null)
-                                {
+                                byte[] dat = DBTypeToBytes(field.Type, obj);
+                                if (dat != null && dat.Length != 0) {
+                                    int hash = GetHashCode(dat);
 
-                                }
-                                else
-                                {
-                                    if(field.Type == DBType.String)
-                                    {
-                                        //Console.WriteLine(row[fn]);
+                                    if (!uniqueDataObjectKeys.ContainsKey(hash)) {
+                                        uint key = GenerateDataEntryKey((uint)data_bs.ByteOffset, (uint)dat.Length);
+                                        if ((key & 1) > 0) {
+                                            data_bs.Write.UShort((ushort)dat.Length);    
+                                        }
+                                        byte[] twisted = TwistDataEntry(key, dat);
+                                        data_bs.Write.ByteArray(twisted);
+
+                                        uniqueDataObjectKeys.Add(hash, key);
                                     }
+
+                                    row[fn] = uniqueDataObjectKeys[hash];
                                 }
-
+                                else {
+                                    row[fn] = null; // I seem to have no fucking choice
+                                }
                             }
-
-                            break;
+                        }
                     }
                 }
             }
-            Console.WriteLine("qq:"+qq);
+
+            Console.WriteLine($"Generated uniqueDataObjects count: {uniqueDataObjectKeys.Count}");
+            Console.WriteLine($"Original uniqueEntries count: {uniqueEntries.Count}");
+            Console.WriteLine($"Generated length (data): {data_bs.ByteOffset}");
+
+            // === Rows ===
+            // Since it contains data references, this should go after data
+            Console.WriteLine("=== Rows ===");
+
+            // Working code
+            for (ushort i = 0; i < Tables.Count; i++)
+            {
+
+                TableInfo tableInfo = tableInfos[i];
+                FieldInfo[] fieldInfo = fieldInfos[i];
+                RowInfo rowInfo = rowInfos[i];
+
+                List<Row> Rows = Tables[i].Rows;
+
+                rowInfo.rowOffset = (uint) rows_bs.ByteOffset; // Set offset relative to written data, later amend with the external offset.
+
+                for (int y = 0; y < rowInfo.rowCount; y++)
+                {
+
+                    // Works as long as we write something :P
+                    rows_bs.ByteOffset = rowInfo.rowOffset + (tableInfo.numBytes * y) + fieldInfo[0].start;
+
+                    // Regular columns
+                    for (int z = 0; z < tableInfo.numFields; z++)
+                    {
+                        if (Tables[i].Columns[z].Padding != 0)
+                        {
+                            uint new_offset = (uint) rows_bs.ByteOffset + (uint) Tables[i].Columns[z].Padding;
+                            uint byte_len = (new_offset - (uint) rows_bs.ByteOffset);
+                            rows_bs.Write.ByteArray(new byte[byte_len]);
+                        }
+
+                        // Write db type and packed / cryped field data
+                        WriteDBType(rows_bs, (DBType)fieldInfo[z].type, Tables[i].Rows[y].Fields[z]);
+                    }
+
+                    // Nullable Fields
+                    if (tableInfo.nullableBitfields > 0)
+                    {
+                        byte[] bitArr = new byte[tableInfo.nullableBitfields*8];
+                        for (int n = 0; n < Tables[i].NullableColumn.Count; n++) {
+                            int index = Tables[i].Columns.IndexOf(Tables[i].NullableColumn[n]);
+                            if (Tables[i].Rows[y].Fields[index] == null) {
+                                bitArr[n] = 1;
+                            }                            
+                        }
+                        rows_bs.Write.BitArray(bitArr);
+                    }
+                }
+                
+                if (rowInfo.rowCount > 0) {
+                    // Calc table length and add offset for alignment
+                    uint tableLen = (rowInfo.rowCount * tableInfo.numBytes);
+                    if (tableInfo.numUsedBytes < tableInfo.numBytes) {
+                        // account for last row being shorter
+                        tableLen -= (uint)(tableInfo.numBytes - tableInfo.numUsedBytes);
+                    }
+                    int mustBeDivisableBy128 = 128;
+                    uint desiredLen = (uint) FindClosestLargerNumber((int)tableLen, mustBeDivisableBy128);
+                    uint requiredPadding = desiredLen - tableLen;
+                    uint correctNewOffset = rowInfo.rowOffset + desiredLen;
+                    if (correctNewOffset != rows_bs.ByteOffset) {
+                        rows_bs.Write.ByteArray(new byte[correctNewOffset - rows_bs.ByteOffset]);
+                    }
+                }
+            }
+            Console.WriteLine($"Generated length (rows): {rows_bs.ByteOffset}");
+
+            // === Info ===
+            // Since it contains row offsets, this should go after row generation
+            Console.WriteLine("=== Info ===");
+            
+            // Write table header
+            info_bs.Write.UInt(this.tableVersion);
+            info_bs.Write.UShort((ushort) Tables.Count);
+
+            // Write table info
+            for (ushort i = 0; i < Tables.Count; i++)
+            {
+                info_bs.Write.Type<TableInfo>(tableInfos[i]);
+            }
+
+            // Write field info
+            for (int i = 0; i < Tables.Count; i++)
+            {
+                for (int x = 0; x < tableInfos[i].numFields; x++)
+                {
+                    info_bs.Write.Type<FieldInfo>(fieldInfos[i][x]);
+                }
+            }
+
+            // Write row info
+            uint tableAndFieldInfoLength = (uint) info_bs.ByteOffset;
+            uint rowInfoSectionLength = (uint) (Tables.Count * 8) + 37; // Size of RowInfo + last stuff
+            uint rowsSectionOffset = tableAndFieldInfoLength + rowInfoSectionLength;
+            Console.WriteLine($"Row Section Base Offset is {rowsSectionOffset}");
+            for (ushort i = 0; i < Tables.Count; i++)
+            {
+                rowInfos[i].rowOffset += rowsSectionOffset;
+                info_bs.Write.Type<RowInfo>(rowInfos[i]);
+            }
+
+            // Write data info
+            // What, this wasnt parsed in the read?
+            // Gotta add it tho D:
+            int dataSectionOffset = (int) (memory_info.Length + memory_rows.Length) + 37;
+            info_bs.Write.Int(dataSectionOffset);
+            info_bs.Write.ByteArray(new byte[33]); // padding?
+            Console.WriteLine($"Generated length (info): {info_bs.ByteOffset}");
+
+            // === Inflated ===
+            // Put together the data that should be compressed
+            Console.WriteLine("=== Inflate ===");
+            Console.WriteLine($"Generated info section begins at: {inflated_bs.ByteOffset}");
+            inflated_bs.Write.ByteArray(memory_info.ToArray());
+            Console.WriteLine($"Generated rows section begins at: {inflated_bs.ByteOffset}");
+            inflated_bs.Write.ByteArray(memory_rows.ToArray());
+            Console.WriteLine($"Generated data section begins at: {inflated_bs.ByteOffset}");
+            inflated_bs.Write.ByteArray(memory_data.ToArray());
+            Console.WriteLine($"Generated length (inflated): {inflated_bs.ByteOffset}");
+
+            // === Deflated ===
+            // Deflate inflated
+            Console.WriteLine("=== Deflate ===");
+            uint uncompressedSize = (uint) memory_inflated.Length;
+            Console.WriteLine($"Writing generated uncompressed size: {uncompressedSize}");
+            deflated_bs.Write.UInt(uncompressedSize);
+            deflated_bs.Write.UInt(0); // size = long?
+            deflated_bs.Write.ByteArray(new byte[] {0x78, 0x01}); // deflate header
+            inflated_bs.ByteOffset = 0;
+            Deflate(inflated_bs, deflated_bs, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed);
+            uint payloadSize = (uint) deflated_bs.ByteOffset;
+            Console.WriteLine($"Generated length (deflated): {deflated_bs.ByteOffset}");
+
+            // === Header Info Prep ===
+            Console.WriteLine("=== Prep Header Info ===");
+            HeaderInfo headerInfo = new HeaderInfo();
+            headerInfo.magic = 0xDA7ABA5E;
+            headerInfo.patchName = this.Patch;
+            headerInfo.timestamp = 1462422114000000;
+            headerInfo.flags = this.Flags;
+            headerInfo.version = this.fileVersion;
+            headerInfo.payloadSize = 0; // Will be set later
 
 
-            //header.Write(bs);
+            // === Obfuscate ===
+            Console.WriteLine("=== Obfuscate ===");
+            byte[] obfuscatedData = memory_deflated.ToArray();
+            MTXor(Checksum.FFnv32(headerInfo.patchName), ref obfuscatedData);       
+            obfuscated_bs.Write.ByteArray(obfuscatedData);
+
+            // === Header ===
+            // Should be made at the end, since it needs to hold the payload size
+            Console.WriteLine("=== Header ===");
+            headerInfo.payloadSize = (uint) memory_obfuscated.Length; // Remember!
+            Console.WriteLine($"Writing generated payload size: {headerInfo.payloadSize}");
+            header_bs.Write.Type<HeaderInfo>(headerInfo);
+            Console.WriteLine($"Generated length (header): {header_bs.ByteOffset}");
+
+            // === Finally, Write ===
+            Console.WriteLine("=== Finalize ===");
+            Console.WriteLine("All preparation steps completed, writing final");
+            bs.Write.ByteArray(memory_header.ToArray());
+            bs.Write.ByteArray(memory_obfuscated.ToArray());
+
+            // === Cleanup ===
+            obfuscatedData = null;
+            headerInfo = null;
+            tableInfos = null;
+            fieldInfos = null;
+            rowInfos = null;
+            memory_header = null;
+            memory_info = null;
+            memory_rows = null;
+            memory_data = null;
+            memory_inflated = null;
+            memory_deflated = null;
+            memory_obfuscated = null;
+            header_bs.Dispose();
+            info_bs.Dispose();
+            rows_bs.Dispose();
+            data_bs.Dispose();
+            inflated_bs.Dispose();
+            deflated_bs.Dispose();
+            obfuscated_bs.Dispose();
+            header_bs = null;
+            info_bs = null;
+            rows_bs = null;
+            data_bs = null;
+            inflated_bs = null;
+            deflated_bs = null;
+            obfuscated_bs = null;
+            GC.Collect();
         }
         #endregion
 
@@ -435,8 +701,6 @@ namespace FauFau.Formats
                     return bs.Read.Float();
                 case DBType.Double:
                     return bs.Read.Double();
-                case DBType.String:
-                    return bs.Read.UInt();
                 case DBType.Vector2:
                     return bs.Read.Type<Vector2>();
                 case DBType.Vector3:
@@ -445,28 +709,23 @@ namespace FauFau.Formats
                     return bs.Read.Type<Vector4>();
                 case DBType.Matrix4x4:
                     return bs.Read.Type<Matrix4x4>();
-                case DBType.Blob:
-                    return bs.Read.UInt();;
                 case DBType.Box3:
                     return bs.Read.Type<Box3>();
-                case DBType.Vector2Array:
-                    return bs.Read.UInt();
-                case DBType.Vector3Array:
-                    return bs.Read.UInt();
-                case DBType.Vector4Array:
-                    return bs.Read.UInt();
                 case DBType.AsciiChar:
                     return bs.Read.Char(BinaryStream.TextEncoding.ASCII);
-                case DBType.ByteArray:
-                    return bs.Read.UInt();
-                case DBType.UShortArray:
-                    return bs.Read.UInt();
-                case DBType.UIntArray:
-                    return bs.Read.UInt();
                 case DBType.HalfMatrix4x3:
                     return bs.Read.Type<HalfMatrix4x3>();
                 case DBType.Half:
                     return bs.Read.Half(); // reads half as float
+                case DBType.String:
+                case DBType.Blob:
+                case DBType.ByteArray:
+                case DBType.UShortArray:
+                case DBType.UIntArray:
+                case DBType.Vector2Array:
+                case DBType.Vector3Array:
+                case DBType.Vector4Array:
+                    return bs.Read.UInt();
                 default:
                     return null;
             }
@@ -484,7 +743,7 @@ namespace FauFau.Formats
             switch (type)
             {
                 case DBType.Byte:
-                    bs.Write.Byte((byte) obj);
+                    bs.Write.Byte((byte)obj);
                     break;
                 case DBType.UShort:
                     bs.Write.UShort((ushort)obj);
@@ -514,28 +773,28 @@ namespace FauFau.Formats
                     bs.Write.Double((double)obj);
                     break;
                 case DBType.Vector2:
-                    bs.Write.Type((Vector2)obj);
+                    bs.Write.Type<Vector2>((Vector2)obj);
                     break;
                 case DBType.Vector3:
-                    bs.Write.Type((Vector3)obj);
+                    bs.Write.Type<Vector3>((Vector3)obj);
                     break;
                 case DBType.Vector4:
-                    bs.Write.Type((Vector4)obj);
+                    bs.Write.Type<Vector4>((Vector4)obj);
                     break;
                 case DBType.Matrix4x4:
-                    bs.Write.Type((Matrix4x4)obj);
+                    bs.Write.Type<Matrix4x4>((Matrix4x4)obj);
                     break;
                 case DBType.Box3:
-                    bs.Write.Type((Box3)obj);
+                    bs.Write.Type<Box3>((Box3)obj);
                     break;
                 case DBType.AsciiChar:
                     bs.Write.Char((char)obj, BinaryStream.TextEncoding.ASCII);
                     break;
                 case DBType.HalfMatrix4x3:
-                    bs.Write.Type((HalfMatrix4x3)obj);
+                    bs.Write.Type<HalfMatrix4x3>((HalfMatrix4x3)obj);
                     break;
                 case DBType.Half:
-                     bs.Write.Half((float) obj); // write float as half
+                     bs.Write.Half((float)obj); // write float as half
                     break;
                 case DBType.String:
                 case DBType.Blob:
@@ -546,6 +805,11 @@ namespace FauFau.Formats
                 case DBType.Vector3Array:
                 case DBType.Vector4Array:
                     //bs.Write.UInt(GetDataKey(type, obj));
+                    // TEMP: Don't expect conversion. Need to setup the hash storage for this I guess.
+                    bs.Write.UInt((uint)obj);
+                    break;
+                default:
+                    Console.WriteLine($"WriteDBType unhandled {type}");
                     break;
             }
 
@@ -567,13 +831,79 @@ namespace FauFau.Formats
             }
             return null;
         }
+
+
+        private uint GenerateDataEntryKey(uint offset, uint dataLength) {
+            uint key = 0;
+
+            // What if we just always?
+            // Write length to the beginning of data and use 31 bits for offset.
+            uint pos = offset;
+            key = pos << 1;
+            key = key | 1;
+            return key;
+
+            // FIXME: Supposed to have two different variants but it didn't work properly.
+            // The key generation itself seems okay with original offsets. (sample-size: 3 entries)
+            /*
+            // Can we use 7 bits for the length and 24 for the offset?
+            if (dataLength <= 0x7F && offset <= 0xFFFFFF) {
+                
+                //length = BitConverter.GetBytes(key)[3];
+                //address = 0x7FFFFF & address;
+               
+                // Yes
+                byte len = (byte)dataLength;
+                key = (uint) len << 24;
+                key = key | (offset << 1);
+            }
+            else {
+                // No, write length to the beginning of data and use 31 bits for offset.
+                uint pos = offset; // & 0x7FFFFFFF;
+                key = pos << 1;
+                key = key | 1;
+            }
+            return key;
+            */
+        }
+
+        private byte[] TwistDataEntry(uint key, byte[] data) {
+            uint length = (uint) data.Length;
+            byte[] ret = null;
+            if (length > 0)
+            {
+                MersenneTwister mt = new MersenneTwister(key);
+                uint x = length >> 2;
+                uint y = length & 3;
+
+                byte[] xor = new byte[length];
+
+                for (int i = 0; i < x; i++)
+                {
+                    WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                }
+                int z = (int)x * 4;
+                for (uint i = 0; i < y; i++)
+                {
+                    xor[z + i] = (byte)mt.Next();
+                }
+                for (int i = 0; i < length; i++)
+                {
+                    data[i] ^= xor[i];
+                }
+                ret = data;
+            }
+            return ret;
+
+        }
+
         private byte[] GetDataEntry(BinaryStream bs, uint key)
         {
             byte[] ret = null;
 
             uint address = key >> 1;
             uint length;
-            object obj = null;
+            //object obj = null;
 
             if ((key & 1) > 0)
             {
@@ -885,7 +1215,7 @@ namespace FauFau.Formats
             2
         };
         public static byte DBTypeLength(DBType type)
-        {
+        {   
             return dbTypeLookup[(byte)type];
         }
 
@@ -1070,6 +1400,11 @@ namespace FauFau.Formats
                 bs.Write.UShort(numUsedBytes);
                 bs.Write.Byte(nullableBitfields);
             }
+
+            public override string ToString()
+            {
+                return $"[Id: {id}, NumBytes: {numBytes}, NumUsedBytes: {numUsedBytes}, nullableBitfields: {nullableBitfields}]";
+            }
         }
         private class FieldInfo : ReadWrite
         {
@@ -1088,7 +1423,15 @@ namespace FauFau.Formats
 
             public void Write(BinaryStream bs)
             {
-                throw new NotImplementedException();
+                bs.Write.UInt(id);
+                bs.Write.UShort(start);
+                bs.Write.Byte(nullableIndex);
+                bs.Write.Byte(type);
+            }
+
+            public override string ToString()
+            {
+                return $"[Id: {id}, Start: {start}, NullableBitIndex: {nullableIndex}, Type: {(DBType)type}]";
             }
         }
         private class RowInfo : ReadWrite
@@ -1106,6 +1449,11 @@ namespace FauFau.Formats
             {
                 bs.Write.UInt(rowOffset);
                 bs.Write.UInt(rowCount);
+            }
+
+            public override string ToString()
+            {
+                return $"[Offset: {rowOffset}, Count: {rowCount}]";
             }
         }
         #endregion
