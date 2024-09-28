@@ -12,13 +12,17 @@ namespace Tests
         {
             //Red5SigTests.Test1();
             
-            //GtChunksTests.TestLoad();
+            //GtChunksTests.TestLoa RowInfo rowInfo = rowInfos[i];d();
 
             //AuthTests.VerifyBench();
             
             //AuthTests.SecretBench();
             
-            AuthTests.UserIdBench();
+            //AuthTests.UserIdBench();
+            
+            //SDBTests.TestRead();
+            //SDBTests.TestWriteCustom();
+            //SDBTests.TestReadCustom();
         }
     }
 }

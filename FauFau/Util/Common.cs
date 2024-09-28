@@ -137,6 +137,7 @@ namespace FauFau.Util
                 destination.Write.ByteArray(inflated.ToArray());
             }
         }
+
         public static void Deflate(BinaryStream source, BinaryStream destination, CompressionLevel level = CompressionLevel.Default, int start = -1, int length = -1)
         {
             if (start > 0) { source.ByteOffset = start; }
@@ -337,6 +338,28 @@ namespace FauFau.Util
             }
 
             return true;
+        }
+
+        public static int FindClosestLargerNumber(int n, int m)
+        {
+            // find the quotient
+            int q = n / m;
+        
+            // 1st possible closest number
+            int n1 = m * q;
+            
+            if (n1 >= n) {
+                return n1;
+            }
+
+            // 2nd possible closest number
+            int n2 = (n * m) > 0 ? (m * (q + 1)) : (m * (q - 1));
+            
+            if (n2 >= n) {
+                return n2;
+            }
+
+            throw new NotImplementedException("waewaewaewaewae"); 
         }
         
     }
