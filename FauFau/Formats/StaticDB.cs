@@ -19,27 +19,21 @@ namespace FauFau.Formats
 
         public string Patch;
         public DateTime Timestamp;
-        public uint Flags;
+        public HeaderFlags Flags;
         public List<Table> Tables;
 
         private uint fileVersion = 12;
-        private uint tableVersion = 1002;
+        private uint memoryVersion = 1002;
         private int numThreads = Environment.ProcessorCount;
 
-        private static Dictionary<uint, int> tableIdLookup = new Dictionary<uint, int>();
-        private static Dictionary<uint, Dictionary<uint, int>> fieldIdLookup = new Dictionary<uint, Dictionary<uint, int>>();
         private static Dictionary<string, uint> stringHashLookup = new Dictionary<string, uint>();
-        private static Dictionary<uint, object> dataEntryCache = new Dictionary<uint, object>();
-        private static Dictionary<uint, byte[]> uniqueEntries = new Dictionary<uint, byte[]>();
+        private static Dictionary<ulong, byte[]> uniqueEntries1000 = new Dictionary<ulong, byte[]>();
+        private static Dictionary<uint, byte[]> uniqueEntries1002 = new Dictionary<uint, byte[]>();
 
         #region File read & write
         public override void Read(BinaryStream bs)
         {
-
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
-            // read header
+            // Read Header
             HeaderInfo headerInfo = bs.Read.Type<HeaderInfo>();
 
             this.Patch = headerInfo.patchName;
@@ -48,53 +42,58 @@ namespace FauFau.Formats
             this.Flags = headerInfo.flags;
             this.fileVersion = headerInfo.version;
 
-            //Console.WriteLine("read: "+sw.ElapsedMilliseconds);
-            sw.Restart();
-
-            // deobfuscate
-
+            // Deobfuscate
             byte[] data = bs.Read.ByteArray((int)headerInfo.payloadSize);
-            MTXor(Checksum.FFnv32(headerInfo.patchName), ref data);
+            if (Flags.HasFlag(HeaderFlags.ObfuscatedPool)) {
+                MTXor(Checksum.FFnv32(headerInfo.patchName), ref data);
+            }
 
-            //Console.WriteLine("dxor: " + sw.ElapsedMilliseconds);
-            sw.Restart();
-
-            // cleanup memory, the original stream is not needed anymore
+            // Cleanup memory, the original stream is not needed anymore
             bs.Dispose();
             bs = null;
             GC.Collect();
 
-            // read compression header
-            // uint inflated size
-            // uint padding
-            // ushort 0x78 0x01 zlib deflate low/no compression  
-            uint inflatedSize = UIntFromBufferLE(ref data);
-            ushort ds = UShortFromBufferLE(ref data, 8);
+            // Decompress
+            BinaryStream ibs;
+            byte[] inflated;
+            if (fileVersion == 7) // 1297 - No pre-payload data, unknown inflated size
+            {
+                // ushort 0x78 0x01 zlib deflate low/no compression
+                var payloadStream = new BinaryStream(new MemoryStream(data[2..]));
+                var inflatedStream = new MemoryStream();
+                ibs = new BinaryStream(inflatedStream);
+                InflateUnknownTargetSize(payloadStream, ibs, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed);
+                inflated = inflatedStream.ToArray();
+            }
+            else
+            {
+                // read compression header
+                // uint inflated size
+                // uint padding
+                // ushort 0x78 0x01 zlib deflate low/no compression  
+                uint inflatedSize = UIntFromBufferLE(ref data);
+                inflated = new byte[inflatedSize];
+                Inflate(data, ref inflated, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, (int)inflatedSize, 10);        
+                ibs = new BinaryStream(new MemoryStream(inflated));
+            }
 
-            byte[] inflated = new byte[inflatedSize];
-            Inflate(data, ref inflated, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, (int)inflatedSize, 10);        
-            BinaryStream ibs = new BinaryStream(new MemoryStream((inflated)));
+            // Cleanup memory, deobfuscated data is no longer needed
             data = null;
-            
-
-            //Console.WriteLine("infl: " + sw.ElapsedMilliseconds);
-            sw.Restart();
-
-            // cleanup memory, the deobfuscated stream is not needed anymore
             GC.Collect();
 
-            // read table header
-            this.tableVersion = ibs.Read.UInt();
+            // Read memory header
+            ibs.ByteOffset = 0;
+            this.memoryVersion = ibs.Read.UInt();
             ushort indexLength = ibs.Read.UShort();
 
-            // read table info
+            // Read table info
             TableInfo[] tableInfos = new TableInfo[indexLength];
             for (ushort i = 0; i < indexLength; i++)
             {
                 tableInfos[i] = ibs.Read.Type<TableInfo>();
             }
 
-            // read field info
+            // Read field info
             FieldInfo[][] fieldInfos = new FieldInfo[indexLength][];
             for (int i = 0; i < indexLength; i++)
             {
@@ -105,15 +104,14 @@ namespace FauFau.Formats
                 }
             }
 
-            // read row info
+            // Read row info
             RowInfo[] rowInfos = new RowInfo[indexLength];
             for (ushort i = 0; i < indexLength; i++)
             {
                 rowInfos[i] = ibs.Read.Type<RowInfo>();
             }
 
-
-            // build tables
+            // Build tables (No reading)
             Tables = new List<Table>(indexLength);
             for (ushort i = 0; i < indexLength; i++)
             {
@@ -177,11 +175,11 @@ namespace FauFau.Formats
                 Tables.Add(table);
             }
 
-            //Console.WriteLine("tabl: " + sw.ElapsedMilliseconds);
-            sw.Restart();
+            // Parse pool offset after rowInfo
+            uint poolOffset = 0;
+            poolOffset = ibs.Read.UInt();
 
-
-            // read rows
+            // Read rows
             ConcurrentQueue<int> tableRowsReadQueue = new ConcurrentQueue<int>();
             for (ushort i = 0; i < indexLength; i++)
             {
@@ -236,35 +234,124 @@ namespace FauFau.Formats
             });
 
             inflated = null;
-            //Console.WriteLine("rows: " + sw.ElapsedMilliseconds);
-            sw.Restart();
 
-            // seek to the very end of the tables/start of data
-            RowInfo lri = rowInfos[rowInfos.Length - 1];
-            TableInfo lti = tableInfos[tableInfos.Length - 1];
-            ibs.ByteOffset = lri.rowOffset + (lri.rowCount * lti.numBytes);
+            // Seek to pool offset
+            ibs.ByteOffset = poolOffset;
 
-            // copy the data to a new stream 
+            // Copy the data to a new stream 
             int dataLength = (int)(ibs.Length - ibs.ByteOffset);
-
             byte[] dataBlock = ibs.Read.ByteArray(dataLength);
 
-            // cleanup
+            // Cleanup
             ibs.Dispose();
             ibs = null;
             GC.Collect();
 
-            // get unique data entry keys
-            HashSet<uint> uniqueKeys = new HashSet<uint>();
-            ConcurrentQueue<uint> uniqueQueue = new ConcurrentQueue<uint>();
-            uniqueEntries = new Dictionary<uint, byte[]>();
+            // Parse the pool data and fill in the tables
+            if (memoryVersion == 1000) {
+                uniqueEntries1000 = new Dictionary<ulong, byte[]>();
+                ParsePoolVersion1000(dataBlock);
+            } else {
+                uniqueEntries1002 = new Dictionary<uint, byte[]>();
+                ParsePoolVersion1002(dataBlock);
+            }
 
+            // Cleanup :>
+            headerInfo = null;
+            tableInfos = null;
+            fieldInfos = null;
+            rowInfos = null;
+            GC.Collect();
+        }
+
+        private void ParsePoolVersion1000(byte[] dataBlock)
+        {
+            // Get the unique keys from all pool type cell values
+            HashSet<(ulong, int)> uniqueKeys = new HashSet<(ulong, int)>();
+            ConcurrentQueue<(ulong, int)> uniqueQueue = new ConcurrentQueue<(ulong, int)>();
             for (int i = 0; i < Tables.Count; i++)
             {
                 for (int x = 0; x < Tables[i].Columns.Count; x++)
                 {
                     DBType type = Tables[i].Columns[x].Type;
+                    if (IsDataType(type))
+                    {
+                        for (int y = 0; y < Tables[i].Rows.Count; y++)
+                        {
+                            ulong? k = (ulong?)Tables[i].Rows[y][x];
+                            if (k != null)
+                            {
+                                if (!uniqueKeys.Contains(((ulong)k, y)))
+                                {
+                                    uniqueKeys.Add(((ulong)k, y));
+                                    uniqueQueue.Enqueue(((ulong)k, y));
+                                }
+                            }
+                        }
 
+                    }
+                }
+            }
+
+            // Unpack & decrypt unique data entries to cache
+            Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i =>
+            {
+                BinaryStream dbs = new BinaryStream(new MemoryStream(dataBlock));
+                while (uniqueQueue.Count != 0)
+                {
+                    (ulong, int) pair;
+                    if (!uniqueQueue.TryDequeue(out pair)) continue;
+                    byte[] d = GetDataEntry(dbs, pair.Item1, pair.Item2);
+
+                    lock(uniqueEntries1000)
+                    {
+                        uniqueEntries1000.Add(pair.Item1, d);
+                    }
+                }
+                dbs.Dispose();
+            });
+
+            // Replace all pool type cell values with the unpacked data
+            for (int z = 0; z < Tables.Count; z++)
+            {
+                for (int x = 0; x < Tables[z].Columns.Count; x++)
+                {
+                    DBType type = Tables[z].Columns[x].Type;
+                    if (IsDataType(type))
+                    {
+                        Parallel.For(0, Tables[z].Rows.Count, y =>
+                        {
+                            ulong? k = (ulong?)Tables[z].Rows[y][x];
+                            object obj = null;
+                            if (k != null)
+                            {
+                                if (uniqueEntries1000.ContainsKey((ulong)k))
+                                {
+                                    byte[] d = uniqueEntries1000[(ulong)k];
+                                    if (d != null)
+                                    {
+                                        obj = BytesToDBType(type, d);
+                                    }
+                                }
+
+                            }
+                            Tables[z].Rows[y][x] = obj;
+                        });
+                    }
+                }
+            }
+        }
+
+        private void ParsePoolVersion1002(byte[] dataBlock)
+        {
+            // Get the unique keys from all pool type cell values
+            HashSet<uint> uniqueKeys = new HashSet<uint>();
+            ConcurrentQueue<uint> uniqueQueue = new ConcurrentQueue<uint>();
+            for (int i = 0; i < Tables.Count; i++)
+            {
+                for (int x = 0; x < Tables[i].Columns.Count; x++)
+                {
+                    DBType type = Tables[i].Columns[x].Type;
                     if (IsDataType(type))
                     {
                         for (int y = 0; y < Tables[i].Rows.Count; y++)
@@ -284,33 +371,25 @@ namespace FauFau.Formats
                 }
             }
 
-            //Console.WriteLine("uniq: " + sw.ElapsedMilliseconds);
-            sw.Restart();
-
-            // unpack & decrypt unique data entries to cache
-            Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i => {
-
+            // Unpack & decrypt unique data entries to cache
+            Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i =>
+            {
                 BinaryStream dbs = new BinaryStream(new MemoryStream(dataBlock));
-
                 while (uniqueQueue.Count != 0)
                 {
                     uint key;
                     if (!uniqueQueue.TryDequeue(out key)) continue;
                     byte[] d = GetDataEntry(dbs, key);
 
-                    lock(uniqueEntries)
+                    lock(uniqueEntries1002)
                     {
-                        uniqueEntries.Add(key, d);
+                        uniqueEntries1002.Add(key, d);
                     }
                 }
                 dbs.Dispose();
             });
-            dataBlock = null;
 
-            //Console.WriteLine("upac: " + sw.ElapsedMilliseconds);
-            sw.Restart();
-
-            // copy data entires to the tables from cache
+            // Replace all pool type cell values with the unpacked data
             for (int z = 0; z < Tables.Count; z++)
             {
                 for (int x = 0; x < Tables[z].Columns.Count; x++)
@@ -324,9 +403,9 @@ namespace FauFau.Formats
                             object obj = null;
                             if (k != null)
                             {
-                                if (uniqueEntries.ContainsKey((uint)k))
+                                if (uniqueEntries1002.ContainsKey((uint)k))
                                 {
-                                    byte[] d = uniqueEntries[(uint)k];
+                                    byte[] d = uniqueEntries1002[(uint)k];
                                     if (d != null)
                                     {
                                         obj = BytesToDBType(type, d);
@@ -337,24 +416,10 @@ namespace FauFau.Formats
                             Tables[z].Rows[y][x] = obj;
                         });
                     }
-
                 }
             }
-
-
-            //Console.WriteLine("assi: " + sw.ElapsedMilliseconds);
-            sw.Restart();
-
-            // cleanup :>
-            uniqueKeys = null;
-            uniqueQueue = null;
-            //uniqueEntries = null; // dont clean up these in case you need to look up data entries post load
-            headerInfo = null;
-            tableInfos = null;
-            fieldInfos = null;
-            rowInfos = null;
-            GC.Collect();
         }
+
         public override void Write(BinaryStream bs)
         {
             // Doing this for debugging purposes
@@ -477,7 +542,7 @@ namespace FauFau.Formats
             }
 
             Console.WriteLine($"Generated uniqueDataObjects count: {uniqueDataObjectKeys.Count}");
-            Console.WriteLine($"Original uniqueEntries count: {uniqueEntries.Count}");
+            Console.WriteLine($"Original uniqueEntries count: {uniqueEntries1002.Count}");
             Console.WriteLine($"Generated length (data): {data_bs.ByteOffset}");
 
             // === Rows ===
@@ -553,7 +618,7 @@ namespace FauFau.Formats
             Console.WriteLine("=== Info ===");
             
             // Write table header
-            info_bs.Write.UInt(this.tableVersion);
+            info_bs.Write.UInt(this.memoryVersion);
             info_bs.Write.UShort((ushort) Tables.Count);
 
             // Write table info
@@ -725,7 +790,11 @@ namespace FauFau.Formats
                 case DBType.Vector2Array:
                 case DBType.Vector3Array:
                 case DBType.Vector4Array:
-                    return bs.Read.UInt();
+                    if (memoryVersion == 1000) {
+                        return bs.Read.ULong();
+                    } else { // 1002
+                        return bs.Read.UInt();
+                    }
                 default:
                     return null;
             }
@@ -816,18 +885,15 @@ namespace FauFau.Formats
         }
         public byte[] GetDataEntry(uint key)
         {
-
-            foreach (uint k in uniqueEntries.Keys)
+            foreach (uint k in uniqueEntries1002.Keys)
             {
                 Console.WriteLine(k);
                 break;
             }
-                
 
-            
-            if (uniqueEntries.ContainsKey(key))
+            if (uniqueEntries1002.ContainsKey(key))
             {
-                return uniqueEntries[key];
+                return uniqueEntries1002[key];
             }
             return null;
         }
@@ -894,7 +960,41 @@ namespace FauFau.Formats
                 ret = data;
             }
             return ret;
+        }
 
+        private byte[] GetDataEntry(BinaryStream bs, ulong key, int row)
+        {
+            byte[] ret = null;
+
+            uint address = (uint)(key & 0x00000000FFFFFFFFU);
+            uint length = (uint)(key >> 32);
+
+            bs.ByteOffset = address;
+            if (length > 0)
+            {
+                MersenneTwister mt = new MersenneTwister((uint)row);
+                uint x = length >> 2;
+                uint y = length & 3;
+
+                byte[] data = bs.Read.ByteArray((int)length);
+                byte[] xor = new byte[length];
+
+                for (int i = 0; i < x; i++)
+                {
+                    WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                }
+                int z = (int)x * 4;
+                for (uint i = 0; i < y; i++)
+                {
+                    xor[z + i] = (byte)mt.Next();
+                }
+                for (int i = 0; i < length; i++)
+                {
+                    data[i] ^= xor[i];
+                }
+                ret = data;
+            }
+            return ret;
         }
 
         private byte[] GetDataEntry(BinaryStream bs, uint key)
@@ -903,7 +1003,6 @@ namespace FauFau.Formats
 
             uint address = key >> 1;
             uint length;
-            //object obj = null;
 
             if ((key & 1) > 0)
             {
@@ -1178,13 +1277,47 @@ namespace FauFau.Formats
             Vector3Array = 19,
             Vector4Array = 20,
             AsciiChar = 21,
+
+            // Present by beta-1475
             ByteArray = 22,
             UShortArray = 23,
             UIntArray = 24,
+            
+            // Present by beta-1869
             HalfMatrix4x3 = 25,
             Half = 26,
         }
-        private static byte[] dbTypeLookup = new byte[]
+        private static byte[] dbTypeLookup1000 = new byte[]
+        {
+            0,
+            1,
+            2,
+            4,
+            8,
+            1,
+            2,
+            4,
+            8,
+            4,
+            8,
+            8,
+            8,
+            12,
+            16,
+            64,
+            8,
+            24,
+            8,
+            8,
+            8,
+            1,
+            8,
+            8,
+            8,
+            24,
+            2
+        };
+        private static byte[] dbTypeLookup1002 = new byte[]
         {
             0,
             1,
@@ -1214,21 +1347,31 @@ namespace FauFau.Formats
             24,
             2
         };
-        public static byte DBTypeLength(DBType type)
+
+        public static byte DBTypeLength(DBType type, uint memoryVersion)
         {   
-            return dbTypeLookup[(byte)type];
+            if (memoryVersion == 1000) {
+                return dbTypeLookup1000[(byte)type];
+            } else {
+                return dbTypeLookup1002[(byte)type];
+            }
+        }
+
+        public byte DBTypeLength(DBType type)
+        {   
+            return DBTypeLength(type, this.memoryVersion);
         }
 
         private static DBType[] dataTypes = new DBType[]
         {
                 DBType.String,
                 DBType.Blob,
-                DBType.ByteArray,
-                DBType.UShortArray,
-                DBType.UIntArray,
                 DBType.Vector2Array,
                 DBType.Vector3Array,
-                DBType.Vector4Array
+                DBType.Vector4Array,
+                DBType.ByteArray,
+                DBType.UShortArray,
+                DBType.UIntArray
         };
 
         public static bool IsDataType(DBType type)
@@ -1344,12 +1487,21 @@ namespace FauFau.Formats
 
 
         #region Sdb file structs
+        [Flags]
+        public enum HeaderFlags : uint
+        {
+            ObfuscatedPool          = 1U << 0,
+            BigEndian               = 1U << 1,
+            Compressed              = 1U << 2,
+            Client                  = 1U << 3,
+            Server                  = 1u << 4,
+        }
         private class HeaderInfo : ReadWrite
         {
             public uint magic;
             public uint version;
             public uint payloadSize;
-            public uint flags;
+            public HeaderFlags flags;
             public ulong timestamp;
             public string patchName;
 
@@ -1358,7 +1510,7 @@ namespace FauFau.Formats
                 magic = bs.Read.UInt();
                 version = bs.Read.UInt();
                 payloadSize = bs.Read.UInt();
-                flags = bs.Read.UInt();
+                flags = (HeaderFlags)bs.Read.UInt();
                 timestamp = bs.Read.ULong();
                 patchName = bs.Read.String(104).Trim().Split('\0')[0];
             }
@@ -1368,7 +1520,7 @@ namespace FauFau.Formats
                 bs.Write.UInt(magic);
                 bs.Write.UInt(version);
                 bs.Write.UInt(payloadSize);
-                bs.Write.UInt(flags);
+                bs.Write.UInt((uint)flags);
                 bs.Write.ULong(timestamp);
                 bs.Write.String(patchName);
                 bs.Write.ByteArray(new byte[104 - patchName.Length]);
@@ -1457,6 +1609,5 @@ namespace FauFau.Formats
             }
         }
         #endregion
-
     }
 }
