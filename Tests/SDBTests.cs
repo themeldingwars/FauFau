@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using FauFau.Formats;
 using static FauFau.Formats.StaticDB;
@@ -92,5 +93,41 @@ namespace Tests
             Console.WriteLine();
         }
 
+        public static void TestWriteMinimalPin()
+        {
+            var sdbLoader = @"X:\PIN\UdpHosts\GameServer\StaticDB\Loaders\StaticDBLoader.cs";
+            // var sdbLoader = new HttpClient().GetStreamAsync("https://raw.githubusercontent.com/themeldingwars/PIN/refs/heads/master/UdpHosts/GameServer/StaticDB/Loaders/StaticDBLoader.cs").Result;
+
+            Console.WriteLine("SDBTests.TestWriteMinimalPIN: Reading SDB: " + sdbPathRead);
+            StaticDB sdb = new StaticDB();
+            sdb.Read(sdbPathRead);
+
+            HashSet<uint> ids = new HashSet<uint>();
+
+            using (var reader = new StreamReader(sdbLoader))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line.Contains(@">("""))
+                    {
+                        var idx = sdb.GetIndexByName(line.Split('"')[1]);
+
+                        if (idx == -1)
+                        {
+                            Console.WriteLine($"Unknown table in line:\n{line}");
+                            return;
+                        }
+
+                        ids.Add(sdb.Tables[idx].Id);
+                    }
+                }
+            }
+
+            sdb.Tables.RemoveAll(table => !ids.Contains(table.Id));
+
+            Console.WriteLine("SDBTests.TestWriteMinimalPIN: Writing SDB: " + sdbPathWrite);
+            sdb.Write(sdbPathWrite);
+        }
     }
 }
