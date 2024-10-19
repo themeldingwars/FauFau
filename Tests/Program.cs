@@ -23,6 +23,8 @@ namespace Tests
             //SDBTests.TestRead();
             //SDBTests.TestWriteCustom();
             //SDBTests.TestReadCustom();
+            
+            CziTests.ReadTest();
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
 
@@ -22,6 +23,17 @@ namespace FauFau.Util
                 hash = 9U * (8193U * hash ^ ((8193U * hash) >> 7));
                 return 33U * (hash ^ (hash >> 17));
             }
+        }
+        
+        public static uint Adler32(ReadOnlySpan<byte> data)
+        {
+            const int mod = 65521;
+            uint      a   = 1, b = 0;
+            foreach (var c in data) {
+                a = (a + c) % mod;
+                b = (b + a) % mod;
+            }
+            return (b << 16) | a;
         }
     }
 }
