@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace FauFau.Util
 {
@@ -27,7 +26,7 @@ namespace FauFau.Util
             }
             public static LogClearDelegate OnLogClear;
 
-            private static Queue<Tuple<LogLevel, string>> queue = new Queue<Tuple<LogLevel, string>>();
+            private static Queue<Tuple<LogLevel, string>> queue = new ();
 
 
             private static LogLevel logLevel = Log.LogLevel.Trace;

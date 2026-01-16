@@ -120,13 +120,13 @@ namespace FauFau.Formats.GtChunk
                     ByteIndices = bs.Read.ByteArray((int) NumIndices * 3);
                 }
                 else {
-                    throw new Exception($"Unexpect indices type: {(uint) indiceType}, wat D:");
+                    throw new Exception($"Unexpect indices type: {indiceType}, wat D:");
                 }
             }
 
             public void Write(BinaryStream bs)
             {
-                throw new System.NotImplementedException();
+                throw new NotImplementedException();
             }
         }
 
@@ -186,7 +186,7 @@ namespace FauFau.Formats.GtChunk
 
             public void Write(BinaryStream bs)
             {
-                throw new System.NotImplementedException();
+                throw new NotImplementedException();
             }
         }
     }

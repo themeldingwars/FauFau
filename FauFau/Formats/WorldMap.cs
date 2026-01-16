@@ -2,7 +2,6 @@
 using static FauFau.Util.Common;
 using FauFau.Util.CommmonDataTypes;
 using SharpCompress.Compressors.Deflate;
-using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -11,10 +10,10 @@ namespace FauFau.Formats
     public class WorldMap : BinaryWrapper
     {
         public string Magic = "GTNO";
-        public List<uint> Version = new List<uint>();
+        public List<uint> Version = new ();
         public uint Last;
         public uint Second;
-        public List<Vector3> Pos = new List<Vector3>();
+        public List<Vector3> Pos = new ();
  
         public override void Read(BinaryStream bs)
         {
@@ -41,12 +40,6 @@ namespace FauFau.Formats
             File.WriteAllBytes("outx.pcx", inflated);
 
             //Inflate(bs, result, (int)decompressedSize, SharpCompress.Compressors.Deflate.CompressionLevel.BestCompression, 0, (int)compressedSize-2);
-
-
-        }
-        public override void Write(BinaryStream bs)
-        {
-            base.Write(bs);
         }
     }
 }

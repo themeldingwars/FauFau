@@ -1,7 +1,5 @@
 ﻿// Copyleft freakbyte 2018, feel free to do whatever you want with this class.
 
-using System;
-
 namespace FauFau.Util
 {
 

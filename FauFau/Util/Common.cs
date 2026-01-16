@@ -4,7 +4,6 @@ using System.IO;
 using Bitter;
 using static Bitter.BinaryUtil;
 using System;
-using System.Buffers;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Runtime.Serialization.Json;

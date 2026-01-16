@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,7 +15,6 @@ namespace FauFau.Formats
 {
     public class StaticDB : BinaryWrapper, IEnumerable<StaticDB.Table>
     {
-
         public string Patch;
         public DateTime Timestamp;
         public HeaderFlags Flags;
@@ -26,9 +24,9 @@ namespace FauFau.Formats
         private uint memoryVersion = 1002;
         private int numThreads = Environment.ProcessorCount;
 
-        private static Dictionary<string, uint> stringHashLookup = new Dictionary<string, uint>();
-        private static Dictionary<ulong, byte[]> uniqueEntries1000 = new Dictionary<ulong, byte[]>();
-        private static Dictionary<uint, byte[]> uniqueEntries1002 = new Dictionary<uint, byte[]>();
+        private static Dictionary<string, uint> stringHashLookup = new ();
+        private static Dictionary<ulong, byte[]> uniqueEntries1000 = new ();
+        private static Dictionary<uint, byte[]> uniqueEntries1002 = new ();
 
         #region File read & write
         public override void Read(BinaryStream bs)

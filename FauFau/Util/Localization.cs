@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.Serialization;
-using System.Text;
 using static FauFau.Util.Common;
 
 namespace FauFau.Util
@@ -98,7 +97,7 @@ namespace FauFau.Util
             [DataContract]
             public class Language : JsonWrapper<Language>
             {
-                private Dictionary<string, string> _strings = new Dictionary<string, string>();
+                private Dictionary<string, string> _strings = new ();
 
                 [DataMember] protected string language = "Unknown";
                 [DataMember]

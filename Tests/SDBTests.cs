@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using FauFau.Formats;
 using static FauFau.Formats.StaticDB;
 

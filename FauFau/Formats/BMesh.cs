@@ -1,8 +1,6 @@
-﻿using FauFau.Util.CommmonDataTypes;
-using Bitter;
+﻿using Bitter;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace FauFau.Formats
 {
@@ -26,12 +24,8 @@ namespace FauFau.Formats
                     ReadBMesh32(bs);
                     break;
                 default:
-                    throw new Exception("uh oh, I don't know how to parse bMesh version " + version);
+                    throw new Exception($"uh oh, I don't know how to parse bMesh version {version}");
             }
-        }
-        public override void Write(BinaryStream bs)
-        {
-            base.Write(bs);
         }
 
         private void ReadBMesh32(BinaryStream bs)
@@ -41,7 +35,7 @@ namespace FauFau.Formats
 
             if (bm.Vertices.Count != bm.Normals.Count)
             {
-                throw new Exception("uh oh, this mesh has " + bm.Vertices.Count + " vertices and " + bm.Normals.Count + " normals??");
+                throw new Exception($"uh oh, this mesh has {bm.Vertices.Count} vertices and {bm.Normals.Count} normals??");
             }
 
             Vertices = new List<Vertex>(bm.Vertices.Count);
@@ -63,8 +57,6 @@ namespace FauFau.Formats
                 });
             }        
         }
-
-
 
 
         public class Vertex

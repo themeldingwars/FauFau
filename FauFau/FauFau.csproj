@@ -9,7 +9,7 @@
     <AssemblyVersion>1.4.0</AssemblyVersion>
     <Version>1.4.0</Version>
     <FileVersion>1.4.0</FileVersion>
-    <LangVersion>9</LangVersion>
+    <LangVersion>12</LangVersion>
     <Authors>TheMeldingWars</Authors>
     <Description>FauFau is a library for manipulating FireFall's various file formats and protocols</Description>
   </PropertyGroup>

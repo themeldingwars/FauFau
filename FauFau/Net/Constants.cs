@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace FauFau.Net
+﻿namespace FauFau.Net
 {
     public static class Constants
     {

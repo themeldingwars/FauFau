@@ -3,9 +3,7 @@ using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using System.Web;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Running;
 using FauFau.Net.Web;
 
 namespace Tests

@@ -2,7 +2,6 @@
 using FauFau.Util.CommmonDataTypes;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace FauFau.Formats
 {
@@ -10,11 +9,11 @@ namespace FauFau.Formats
     {
         public bool Compressed = false;
 
-        public DescriptionSection Description = new DescriptionSection();
-        public IndexSection Index = new IndexSection();
-        public MetaSection Meta = new MetaSection();
+        public DescriptionSection Description = new ();
+        public IndexSection Index = new ();
+        public MetaSection Meta = new ();
 
-        public List<Packet> Packets = new List<Packet>();
+        public List<Packet> Packets = new ();
         
 
         public override void Read(BinaryStream bs)
@@ -184,7 +183,7 @@ namespace FauFau.Formats
         public class IndexSection : ReadWrite
         {
             public int Version = 5;
-            public List<uint> Offsets = new List<uint>();
+            public List<uint> Offsets = new ();
 
             public void Read(BinaryStream bs)
             {

@@ -1,15 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
-using System.Linq;
 using System.Numerics;
 using Bitter;
 using FauFau.Formats.GtChunk;
 using FauFau.Util;
-using SharpCompress.Compressors.Deflate;
 using SharpCompress.Compressors.LZMA;
-using CompressionLevel = SharpCompress.Compressors.Deflate.CompressionLevel;
 
 namespace FauFau.Formats
 {
@@ -164,11 +160,6 @@ namespace FauFau.Formats
         {
             var nodeHeader = new Node(bs);
             return nodeHeader;
-        }
-
-        public override void Write(BinaryStream bs)
-        {
-            base.Write(bs);
         }
 
     #region Types
