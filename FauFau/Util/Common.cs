@@ -116,7 +116,7 @@ namespace FauFau.Util
 
             using (MemoryStream payload = new MemoryStream(source.Read.ByteArray((int)l)))
             using (MemoryStream inflated = new MemoryStream())
-            using (GZipStream ds = new GZipStream(payload, CompressionMode.Decompress, level))
+            using (GZipStream ds = new GZipStream(payload, CompressionMode.Decompress, level, new SharpCompress.Readers.ReaderOptions()))
             {
                 ds.CopyTo(inflated);
                 destination.Write.ByteArray(inflated.ToArray());
@@ -160,7 +160,7 @@ namespace FauFau.Util
 
             using (MemoryStream memory = new MemoryStream())
             {
-                using (GZipStream gzip = new GZipStream(memory, CompressionMode.Compress, level))
+                using (GZipStream gzip = new GZipStream(memory, CompressionMode.Compress, level, new SharpCompress.Readers.ReaderOptions()))
                 {
                     gzip.Write(payload, 0, payload.Length);
                 }

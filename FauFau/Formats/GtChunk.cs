@@ -403,7 +403,7 @@ namespace FauFau.Formats
             public byte[] Decompress()
             {
                 var       decompressed = new byte[UncompressedSize];
-                using var lzmaStream   = new LzmaStream(Properites, new MemoryStream(CompressedData));
+                using var lzmaStream   = LzmaStream.Create(Properites, new MemoryStream(CompressedData));
 
                 lzmaStream.Read(decompressed, 0, decompressed.Length);
                 return decompressed;

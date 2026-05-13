@@ -5,10 +5,10 @@
     <Platforms>AnyCPU;x86;x64</Platforms>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
-    <PackageVersion>1.5.0</PackageVersion>
-    <AssemblyVersion>1.5.0</AssemblyVersion>
-    <Version>1.5.0</Version>
-    <FileVersion>1.5.0</FileVersion>
+    <PackageVersion>1.5.1</PackageVersion>
+    <AssemblyVersion>1.5.1</AssemblyVersion>
+    <Version>1.5.1</Version>
+    <FileVersion>1.5.1</FileVersion>
     <LangVersion>12</LangVersion>
     <Authors>TheMeldingWars</Authors>
     <Description>FauFau is a library for manipulating FireFall's various file formats and protocols</Description>
@@ -56,7 +56,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="[10.0.2,)" />
-    <PackageReference Include="SharpCompress" Version="[0.44.0,)" />
+    <PackageReference Include="SharpCompress" Version="[0.48.0,)" />
   </ItemGroup>
 
   <ItemGroup>
