@@ -15,7 +15,7 @@ namespace FauFau.Util
 
             return vec;
         }
-        
+
         public static Vector3[] Vector3Array(this Bitter.BinaryReader br, int count)
         {
             var arr = new Vector3[count];

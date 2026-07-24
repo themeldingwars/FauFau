@@ -145,5 +145,5 @@ namespace FauFau.Util.CommmonDataTypes
             bs.Write.Type(z);
             bs.Write.Type(w);
         }
-    }  
+    }
 }

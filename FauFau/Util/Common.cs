@@ -306,15 +306,15 @@ namespace FauFau.Util
                     srcIdx++;
                 }
             });
-            
+
             return str.AsSpan();
         }
-        
+
         public static char[] BytesToHexChars(ReadOnlySpan<byte> hexBytes, bool upperCase = true)
         {
             ReadOnlySpan<char> values = upperCase ? "0123456789ABCDEF" : "0123456789abcdef";
             char[] ret = new char[hexBytes.Length * 2];
-            
+
             for (int i = 0; i < hexBytes.Length; i++)
             {
                 ret[i*2]     = values[hexBytes[i] >> 4];
@@ -322,12 +322,12 @@ namespace FauFau.Util
             }
             return ret;
         }
-        
+
         public static bool TryWriteBytesAsHex(ReadOnlySpan<byte> input, Span<char> output, bool upperCase = true)
         {
             if (output.Length < input.Length * 2)
                 return false;
-            
+
             ReadOnlySpan<char> values = upperCase ? "0123456789ABCDEF" : "0123456789abcdef";
 
             for (int i = 0; i < input.Length; i++)
@@ -343,23 +343,23 @@ namespace FauFau.Util
         {
             // find the quotient
             int q = n / m;
-        
+
             // 1st possible closest number
             int n1 = m * q;
-            
+
             if (n1 >= n) {
                 return n1;
             }
 
             // 2nd possible closest number
             int n2 = (n * m) > 0 ? (m * (q + 1)) : (m * (q - 1));
-            
+
             if (n2 >= n) {
                 return n2;
             }
 
             throw new NotImplementedException("waewaewaewaewae"); 
         }
-        
+
     }
 }

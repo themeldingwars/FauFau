@@ -33,7 +33,7 @@ namespace FauFau.Util
 
             return data;
         }
-        
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateCurrentView(int MoveForwardAmount)
         {
@@ -71,7 +71,7 @@ namespace FauFau.Util
                 return span;
             }
             else {
-                
+
             }
         }*/
     }

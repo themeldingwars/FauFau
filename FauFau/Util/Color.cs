@@ -32,7 +32,7 @@ namespace FauFau.Util
                     }
                     else if (!_rgbaDirty)
                     {
-                        _bytes = new byte[] 
+                        _bytes = new byte[]
                         {
                             (byte)(_rgba[0] * 255),
                             (byte)(_rgba[1] * 255),
@@ -121,7 +121,7 @@ namespace FauFau.Util
             {
                 if (value.Length == 4)
                 {
-                    float[] _in = new float[] 
+                    float[] _in = new float[]
                     {
                         Math.Clamp(value[0], -1.0f, 1.0f),
                         Math.Clamp(value[1], -1.0f, 1.0f),

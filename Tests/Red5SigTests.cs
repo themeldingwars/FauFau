@@ -14,7 +14,7 @@ namespace Tests
         {
             string testHeader = @"Red5 669d417a26d056693a63f3c63437be717febb615 ver=1&tc=1464664242&nonce=0000295c00007084&uid=d8wP5gy2K%2BrsJYAi8PKf%2BJq4Bv8%3D&host=DUMPTRUCK&path=&hbody=da39a3ee5e6b4b0d3255bfef95601890afd80709";
             string testRequestStr = @"ver=2&tc=1596167883&nonce=41ab72d92674182d&uid=RnBt5FRsgY4ZibwS1WzaE0HL%2B9o%3D&host=indev.themeldingwars.com&path=%2Fclientapi%2Fapi%2Fv2%2Faccounts%2Flogin&hbody=da39a3ee5e6b4b0d3255bfef95601890afd80709&cid=0";
-            
+
             var parsedSig3 = Red5Sig.ParseString("dfgdg gfgfg &fdfds= ffdsfs= ".AsSpan());
 
             for (int i = 0; i < 2000; i++) {
@@ -22,7 +22,7 @@ namespace Tests
             }
 
             var secert1 = Red5Sig.GenerateSecret("", "");
-            
+
             for (int i = 0; i < 2000; i++) {
                 var secert2 = Red5Sig.GenerateSecret("", "");
             }
@@ -31,10 +31,10 @@ namespace Tests
             var testToken1 = Red5Sig.GenerateToken("", "");
 
             Console.WriteLine();
-            
+
             //BenchmarkRunner.Run<Red5SigBenchmark>();
         }
-        
+
         [ShortRunJob]
         public class Red5SigBenchmark
         {
@@ -57,35 +57,35 @@ namespace Tests
                 var result = Red5Sig.ParseString(testHeader1.AsSpan());
                 return result;
             }
-            
+
             [Benchmark]
             public Red5Sig.QsValues Version2()
             {
                 var result = Red5Sig.ParseString(testHeader2.AsSpan());
                 return result;
             }
-            
+
             [Benchmark]
             public Red5Sig.QsValues BadString()
             {
                 var result = Red5Sig.ParseString(testHeader3.AsSpan());
                 return result;
             }
-            
+
             [Benchmark]
             public Red5Sig.QsValues BadString2()
             {
                 var result = Red5Sig.ParseString(testHeader4.AsSpan());
                 return result;
             }
-            
+
             [Benchmark]
             public ReadOnlySpan<char> GenerateUserId()
             {
                 var result = Red5Sig.GenerateUserId(userEmail);
                 return result;
             }
-            
+
             [Benchmark]
             public ReadOnlySpan<char> GenerateUserId2()
             {
@@ -97,14 +97,14 @@ namespace Tests
                 var hash       = Sha1Hasher.ComputeHash(strAsBytes.ToArray());
                 return Convert.ToBase64String(hash);
             }
-            
+
             [Benchmark]
             public ReadOnlySpan<char> GenerateSecret()
             {
                 var secert1 = Red5Sig.GenerateSecret(userEmail, userPassword);
                 return secert1;
             }
-            
+
             [Benchmark]
             public ReadOnlySpan<char> GenrateSecert2()
             {
@@ -113,13 +113,13 @@ namespace Tests
                 "-".AsSpan().CopyTo(preHashed.Slice(userEmail.Length));
                 userPassword.AsSpan().CopyTo(preHashed.Slice(userEmail.Length + 1));
                 USER_AUTH_SALT.AsSpan().CopyTo(preHashed.Slice(userEmail.Length + userPassword.Length + 1));
-            
+
                 var strChars = Encoding.UTF8.GetBytes(preHashed.ToArray());
                 var hash     = Sha1Hasher.ComputeHash(strChars);
                 var secret   = BitConverter.ToString(hash, 0, hash.Length).Replace("-", "");
                 return secret;
             }
-            
+
             [Benchmark]
             public ReadOnlySpan<char> ToHexest()
             {
@@ -128,7 +128,7 @@ namespace Tests
                 const string hexValues      = "0123456789ABCDEF";
                 const string hexValuesLower = "0123456789abcdef";
                 var          values         = true ? hexValues.AsSpan() : hexValuesLower.AsSpan();
-            
+
                 int srcIdx = 0;
                 for (int i = 0; i < length; i += 2) {
                     buffer[i]     = values[hexBytes[srcIdx] >> 4];
@@ -140,18 +140,18 @@ namespace Tests
                 ArrayPool<char>.Shared.Return(buffer);
                 return result;
             }
-            
+
             [Benchmark]
             public ReadOnlySpan<char> ToHexest2()
             {
                 int          length         = hexBytes.Length * 2;
-                
+
                 var str = string.Create(length, (length, hexBytes.AsSpan().ToArray()), (chars, state) =>
                 {
                     const string hexValues      = "0123456789ABCDEF";
                     const string hexValuesLower = "0123456789abcdef";
                     var          values         = true ? hexValues.AsSpan() : hexValuesLower.AsSpan();
-    
+
                     int srcIdx = 0;
                     for (int i = 0; i < state.length; i += 2) {
                         chars[i]     = values[state.Item2[srcIdx] >> 4];
@@ -159,7 +159,7 @@ namespace Tests
                         srcIdx++;
                     }
                 });
-            
+
                 return str.AsSpan();
             }
         }

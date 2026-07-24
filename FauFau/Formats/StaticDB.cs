@@ -68,10 +68,10 @@ namespace FauFau.Formats
                 // read compression header
                 // uint inflated size
                 // uint padding
-                // ushort 0x78 0x01 zlib deflate low/no compression  
+                // ushort 0x78 0x01 zlib deflate low/no compression
                 uint inflatedSize = UIntFromBufferLE(ref data);
                 inflated = new byte[inflatedSize];
-                Inflate(data, ref inflated, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, (int)inflatedSize, 10);        
+                Inflate(data, ref inflated, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, (int)inflatedSize, 10);
                 ibs = new BinaryStream(new MemoryStream(inflated));
             }
 
@@ -484,7 +484,7 @@ namespace FauFau.Formats
                 RowInfo gen_rowInfo = new RowInfo();
                 gen_rowInfo.rowCount = (uint) table.Rows.Count;
                 gen_rowInfo.rowOffset = 0; // This is updated later, when we generate the data.
-                
+
                 // Assign
                 tableInfos[i] = gen_tableInfo;
                 fieldInfos[i] = gen_fieldInfo;
@@ -494,9 +494,9 @@ namespace FauFau.Formats
             // === Data ===
             Console.WriteLine("=== Data ===");
             int GetHashCode(byte[] val)
-            {            
+            {
                 var str = Convert.ToBase64String(val);
-                return str.GetHashCode();          
+                return str.GetHashCode();
             }
             Dictionary<int, uint> uniqueDataObjectKeys = new Dictionary<int, uint>();
 
@@ -520,7 +520,7 @@ namespace FauFau.Formats
                                     if (!uniqueDataObjectKeys.ContainsKey(hash)) {
                                         uint key = GenerateDataEntryKey((uint)data_bs.ByteOffset, (uint)dat.Length);
                                         if ((key & 1) > 0) {
-                                            data_bs.Write.UShort((ushort)dat.Length);    
+                                            data_bs.Write.UShort((ushort)dat.Length);
                                         }
                                         byte[] twisted = TwistDataEntry(key, dat);
                                         data_bs.Write.ByteArray(twisted);
@@ -587,12 +587,12 @@ namespace FauFau.Formats
                             int index = Tables[i].Columns.IndexOf(Tables[i].NullableColumn[n]);
                             if (Tables[i].Rows[y].Fields[index] == null) {
                                 bitArr[n] = 1;
-                            }                            
+                            }
                         }
                         rows_bs.Write.BitArray(bitArr);
                     }
                 }
-                
+
                 if (rowInfo.rowCount > 0) {
                     // Calc table length and add offset for alignment
                     uint tableLen = (rowInfo.rowCount * tableInfo.numBytes);
@@ -614,7 +614,7 @@ namespace FauFau.Formats
             // === Info ===
             // Since it contains row offsets, this should go after row generation
             Console.WriteLine("=== Info ===");
-            
+
             // Write table header
             info_bs.Write.UInt(this.memoryVersion);
             info_bs.Write.UShort((ushort) Tables.Count);
@@ -691,7 +691,7 @@ namespace FauFau.Formats
             // === Obfuscate ===
             Console.WriteLine("=== Obfuscate ===");
             byte[] obfuscatedData = memory_deflated.ToArray();
-            MTXor(Checksum.FFnv32(headerInfo.patchName), ref obfuscatedData);       
+            MTXor(Checksum.FFnv32(headerInfo.patchName), ref obfuscatedData);
             obfuscated_bs.Write.ByteArray(obfuscatedData);
 
             // === Header ===
@@ -806,7 +806,7 @@ namespace FauFau.Formats
                 bs.Write.ByteArray(new byte[DBTypeLength(type)]);
                 return;
             }
-            
+
             switch (type)
             {
                 case DBType.Byte:
@@ -912,10 +912,10 @@ namespace FauFau.Formats
             /*
             // Can we use 7 bits for the length and 24 for the offset?
             if (dataLength <= 0x7F && offset <= 0xFFFFFF) {
-                
+
                 //length = BitConverter.GetBytes(key)[3];
                 //address = 0x7FFFFF & address;
-               
+
                 // Yes
                 byte len = (byte)dataLength;
                 key = (uint) len << 24;
@@ -1213,7 +1213,7 @@ namespace FauFau.Formats
             }
             set
             {
-                Tables[index] = value;    
+                Tables[index] = value;
             }
         }
         public int GetIndexByName(string name)
@@ -1280,7 +1280,7 @@ namespace FauFau.Formats
             ByteArray = 22,
             UShortArray = 23,
             UIntArray = 24,
-            
+
             // Present by beta-1869
             HalfMatrix4x3 = 25,
             Half = 26,
@@ -1347,7 +1347,7 @@ namespace FauFau.Formats
         };
 
         public static byte DBTypeLength(DBType type, uint memoryVersion)
-        {   
+        {
             if (memoryVersion == 1000) {
                 return dbTypeLookup1000[(byte)type];
             } else {
@@ -1356,7 +1356,7 @@ namespace FauFau.Formats
         }
 
         public byte DBTypeLength(DBType type)
-        {   
+        {
             return DBTypeLength(type, this.memoryVersion);
         }
 

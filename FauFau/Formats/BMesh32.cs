@@ -68,7 +68,7 @@ namespace FauFau.Formats
             {
                 ReferenceMeshFileName = Read.String();
             }
-            
+
             ReferenceMeshFileTime = Read.ULong();
             ReferenceMeshType = (MeshType)Read.Byte();
 
@@ -326,7 +326,7 @@ namespace FauFau.Formats
         }
         public class Hardpoint : ReadWrite
         {
-            public string name; // 64 char 
+            public string name; // 64 char
             public int parent;
             public Matrix4x4 bindMatrix;              // absolute transform for the hard point
             public Matrix4x4 inverseBindMatrix;       // used for skinning

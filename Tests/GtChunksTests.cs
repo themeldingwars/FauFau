@@ -22,7 +22,7 @@ namespace Tests
                     chunk.GetSubChunkNodes(datIdx);
                 }
             }*/
-            
+
             chunk.GetSubChunkNodes(8);
 
             Console.WriteLine();

@@ -62,7 +62,7 @@ namespace Tests
                     row[table.GetColumnIndexByName("zoneType")] = (byte) 0;
                     row[table.GetColumnIndexByName("prevent_sub_zone_spawns")] = (byte) 0;
                 }
-                
+
                 // Add ZoneChunkLinker
                 if (true) {
                     Table table = sdb.GetTableByName("dbzonemetadata::ZoneChunkLinker");
@@ -72,7 +72,7 @@ namespace Tests
                     row[table.GetColumnIndexByName("zoneid")] = (uint) 11;
                 }
             }
-            
+
             // Write
             Console.WriteLine("SDBTests.TestWriteCustom: Writing SDB: " + sdbPathWrite);
             sdb.Write(sdbPathWrite);

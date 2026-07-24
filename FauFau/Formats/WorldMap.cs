@@ -14,7 +14,7 @@ namespace FauFau.Formats
         public uint Last;
         public uint Second;
         public List<Vector3> Pos = new ();
- 
+
         public override void Read(BinaryStream bs)
         {
             Bitter.BinaryReader Read = bs.Read;

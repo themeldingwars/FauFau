@@ -55,7 +55,7 @@ namespace FauFau.Formats
                         z = bm.Normals[i].z
                     }
                 });
-            }        
+            }
         }
 
 

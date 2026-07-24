@@ -31,7 +31,7 @@ namespace FauFau.Util
 
         public static bool SingleInstanceApplication = false;
 
-       
+
         public static readonly string TMWBaseDataPath = Path.Combine(Environment.ExpandEnvironmentVariables(@"%LocalAppData%"), "TheMeldingWars");
 
         private static string dataPath;
@@ -48,7 +48,7 @@ namespace FauFau.Util
             }
         }
 
-        private static string name;   
+        private static string name;
         public static string Name { get { return name == null ? typeof(T).Name : name; } set { name = value; } }
 
         private static T config;
@@ -99,11 +99,11 @@ namespace FauFau.Util
                 if (SingleInstanceApplication)
                 {
                     solitude = new Solitude("TheMeldingWars." + Name, CommandHandler);
-                    
+
                     if (!solitude.FirstInstance)
                     {
                         return;
-                    }              
+                    }
                 }
 
 
@@ -158,7 +158,7 @@ namespace FauFau.Util
             Error?.Invoke(e);
             Environment.Exit(0);
         }
-    
+
         public static string ParseException(Exception ex)
         {
             var sep = "---------------------------------------------------------";

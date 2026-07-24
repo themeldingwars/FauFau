@@ -14,7 +14,7 @@ namespace FauFau.Formats
         public MetaSection Meta = new ();
 
         public List<Packet> Packets = new ();
-        
+
 
         public override void Read(BinaryStream bs)
         {
@@ -26,7 +26,7 @@ namespace FauFau.Formats
                 bs.ByteOffset = 0;
 
                 if (magic == 559903)
-                {                
+                {
                     try
                     {
                         Util.Common.UnGzipUnknownTargetSize(bs, payload);
@@ -54,8 +54,8 @@ namespace FauFau.Formats
                     return;
                 }
 
-                ReadPayload(payload);                
-            } 
+                ReadPayload(payload);
+            }
         }
         private void ReadPayload(BinaryStream bs)
         {
