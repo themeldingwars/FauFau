@@ -5,10 +5,10 @@
     <Platforms>AnyCPU;x86;x64</Platforms>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
-    <PackageVersion>1.5.1</PackageVersion>
-    <AssemblyVersion>1.5.1</AssemblyVersion>
-    <Version>1.5.1</Version>
-    <FileVersion>1.5.1</FileVersion>
+    <PackageVersion>1.5.2</PackageVersion>
+    <AssemblyVersion>1.5.2</AssemblyVersion>
+    <Version>1.5.2</Version>
+    <FileVersion>1.5.2</FileVersion>
     <LangVersion>12</LangVersion>
     <Authors>TheMeldingWars</Authors>
     <Description>FauFau is a library for manipulating FireFall's various file formats and protocols</Description>
