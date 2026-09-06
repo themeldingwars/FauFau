@@ -3,15 +3,22 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Platforms>AnyCPU;x86;x64</Platforms>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
-    <PackageVersion>1.5.2</PackageVersion>
-    <AssemblyVersion>1.5.2</AssemblyVersion>
-    <Version>1.5.2</Version>
-    <FileVersion>1.5.2</FileVersion>
     <LangVersion>12</LangVersion>
+      
+    <!-- NuGet Package Information -->
+    <PackageId>FauFau</PackageId>
     <Authors>TheMeldingWars</Authors>
     <Description>FauFau is a library for manipulating FireFall's various file formats and protocols</Description>
+    <PackageVersion>1.5.3</PackageVersion>
+    <AssemblyVersion>1.5.3</AssemblyVersion>
+    <Version>1.5.3</Version>
+    <FileVersion>1.5.3</FileVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -49,15 +56,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Lib\**" />
-    <EmbeddedResource Remove="Lib\**" />
-    <None Remove="Lib\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="[10.0.2,)" />
-    <PackageReference Include="SharpCompress" Version="[0.50.0,)" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="[10.0.11,)" />
+    <PackageReference Include="SharpCompress" Version="[0.50.4,)" />
     <PackageReference Include="TMW.Bitter" Version="[1.0.0,)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
