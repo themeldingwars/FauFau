@@ -64,7 +64,7 @@ namespace FauFau.Formats
             Hardpoints = Read.TypeList<Hardpoint>(Read.Int());
 
             int referenceMeshFileNameLength = Read.Int();
-            if(referenceMeshFileNameLength > 0)
+            if (referenceMeshFileNameLength > 0)
             {
                 ReferenceMeshFileName = Read.String();
             }

@@ -205,7 +205,7 @@ namespace FauFau.Formats
                         dbs.ByteOffset = rowInfo.rowOffset + (tableInfo.numBytes * y) + fieldInfo[0].start;
                         for (int z = 0; z < tableInfo.numFields; z++)
                         {
-                            if(Tables[i].Columns[z].Padding != 0)
+                            if (Tables[i].Columns[z].Padding != 0)
                             {
                                 dbs.ByteOffset += Tables[i].Columns[z].Padding;
                             }
@@ -301,7 +301,7 @@ namespace FauFau.Formats
                     if (!uniqueQueue.TryDequeue(out pair)) continue;
                     byte[] d = GetDataEntry(dbs, pair.Item1, pair.Item2);
 
-                    lock(uniqueEntries1000)
+                    lock (uniqueEntries1000)
                     {
                         uniqueEntries1000.Add(pair.Item1, d);
                     }
@@ -379,7 +379,7 @@ namespace FauFau.Formats
                     if (!uniqueQueue.TryDequeue(out key)) continue;
                     byte[] d = GetDataEntry(dbs, key);
 
-                    lock(uniqueEntries1002)
+                    lock (uniqueEntries1002)
                     {
                         uniqueEntries1002.Add(key, d);
                     }
@@ -800,7 +800,7 @@ namespace FauFau.Formats
         }
         public void WriteDBType(BinaryStream bs, DBType type, object obj)
         {
-            if(obj == null)
+            if (obj == null)
             {
                 // just write blank bytes
                 bs.Write.ByteArray(new byte[DBTypeLength(type)]);
@@ -1222,9 +1222,9 @@ namespace FauFau.Formats
         }
         public int GetIndexById(uint id)
         {
-            for(int i = 0; i < Tables.Count; i++)
+            for (int i = 0; i < Tables.Count; i++)
             {
-                if(Tables[i].Id == id)
+                if (Tables[i].Id == id)
                 {
                     return i;
                 }

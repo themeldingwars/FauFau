@@ -10,7 +10,7 @@ namespace FauFau.Formats
 
         public override void Read(BinaryStream bs)
         {
-            if(bs.Length < 7 || !bs.Read.String(5).Equals("bMesh"))
+            if (bs.Length < 7 || !bs.Read.String(5).Equals("bMesh"))
             {
                 throw new Exception("uh oh, this doesn't seem to be a bMesh file?");
             }
@@ -18,7 +18,7 @@ namespace FauFau.Formats
             ushort version = bs.Read.UShort();
             bs.ByteOffset = 0;
 
-            switch(version)
+            switch (version)
             {
                 case 32:
                     ReadBMesh32(bs);

@@ -39,7 +39,7 @@ namespace FauFau.Util
         {
             get
             {
-                if(dataPath == null)
+                if (dataPath == null)
                 {
                     dataPath = GetDataPath(Name);
                     Directory.CreateDirectory(dataPath);
@@ -176,9 +176,9 @@ namespace FauFau.Util
                 var properties = ex.GetType().GetProperties();
                 foreach (var property in properties)
                 {
-                    foreach(string x in ignore)
+                    foreach (string x in ignore)
                     {
-                        if(property.Name.Contains(x))
+                        if (property.Name.Contains(x))
                         {
                             continue;
                         }

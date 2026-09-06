@@ -10,7 +10,7 @@ namespace FauFau.Net
 
         public void Start(int matrixPort = Constants.DefaultMatrixPort, int gamePort = Constants.DefaultGamePort)
         {
-            if(running)
+            if (running)
             {
                 // err
                 return;

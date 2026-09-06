@@ -48,7 +48,7 @@ namespace FauFau.Formats
 
                 payload.ByteOffset = 0;
 
-                if(payload.Length == 0)
+                if (payload.Length == 0)
                 {
                     Compressed = false;
                     return;
@@ -63,7 +63,7 @@ namespace FauFau.Formats
             Index = bs.Read.Type<IndexSection>();
             Meta = bs.Read.Type<MetaSection>();
             Packets = new List<Packet>();
-            while(!bs.EndOfStream)
+            while (!bs.EndOfStream)
             {
                 Packets.Add(bs.Read.Type<Packet>());
             }

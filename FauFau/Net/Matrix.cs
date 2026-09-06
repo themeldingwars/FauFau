@@ -16,7 +16,7 @@ namespace FauFau.Net
 
             public void Start()
             {
-                if(thread == null)
+                if (thread == null)
                 {
                     thread = new Thread(Run);
                     thread.Start();
