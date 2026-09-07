@@ -196,7 +196,7 @@ namespace FauFau.Formats
                     FieldInfo[] fieldInfo = fieldInfos[i];
                     RowInfo rowInfo = rowInfos[i];
 
-                    Tables[i].Rows = new List<Row>();
+                    Tables[i].Rows = new List<Row>((int)rowInfo.rowCount);
 
                     for (int y = 0; y < rowInfo.rowCount; y++)
                     {
