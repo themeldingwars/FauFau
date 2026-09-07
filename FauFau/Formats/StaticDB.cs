@@ -53,7 +53,6 @@ namespace FauFau.Formats
             // Cleanup memory, the original stream is not needed anymore
             bs.Dispose();
             bs = null;
-            GC.Collect();
 
             // Decompress
             BinaryStream ibs;
@@ -81,7 +80,6 @@ namespace FauFau.Formats
 
             // Cleanup memory, deobfuscated data is no longer needed
             data = null;
-            GC.Collect();
 
             // Read memory header
             ibs.ByteOffset = 0;
@@ -247,7 +245,6 @@ namespace FauFau.Formats
             // Cleanup
             ibs.Dispose();
             ibs = null;
-            GC.Collect();
 
             // Parse the pool data and fill in the tables
             if (memoryVersion == 1000) {
@@ -263,7 +260,6 @@ namespace FauFau.Formats
             tableInfos = null;
             fieldInfos = null;
             rowInfos = null;
-            GC.Collect();
         }
 
         private void ParsePoolVersion1000(byte[] dataBlock)
@@ -739,7 +735,6 @@ namespace FauFau.Formats
             inflated_bs = null;
             deflated_bs = null;
             obfuscated_bs = null;
-            GC.Collect();
         }
         #endregion
 
