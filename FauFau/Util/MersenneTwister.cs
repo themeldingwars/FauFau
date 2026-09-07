@@ -4,6 +4,8 @@ namespace FauFau.Util
 {
     public class MersenneTwister
     {
+        private static readonly uint[] mag01 = [0x0, 0x9908B0DF, 0x3B9ACA00];
+        
         private uint n = 624;
         private uint m = 397;
         private uint uMask = 0x80000000;
@@ -27,13 +29,10 @@ namespace FauFau.Util
                 mt[mti] &= 0xffffffffU;
             }
         }
+
         public uint Next()
         {
             uint y = 0;
-            uint[] mag01 = new uint[3];
-            mag01[0] = 0x0;
-            mag01[1] = 0x9908B0DF;
-            mag01[2] = 0x3B9ACA00;
 
             if (mti >= n)
             {
@@ -64,6 +63,7 @@ namespace FauFau.Util
 
             return y2;
         }
+
         public uint[] Next(uint n)
         {
             uint[] ret = new uint[n];
