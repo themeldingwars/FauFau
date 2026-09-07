@@ -22,7 +22,7 @@ namespace FauFau.Util
             byte[] xor = new byte[l];
             for (int i = 0; i < x; i++)
             {
-                WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                WriteToBufferLE(xor, mt.Next(), i * 4);
             }
             int z = (int)x * 4;
             for (uint i = 0; i < y; i++)
@@ -49,7 +49,7 @@ namespace FauFau.Util
 
             for (int i = 0; i < x; i++)
             {
-                WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                WriteToBufferLE(xor, mt.Next(), i * 4);
             }
             int z = (int)x * 4;
             for (uint i = 0; i < y; i++)

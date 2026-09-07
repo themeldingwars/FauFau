@@ -69,7 +69,7 @@ namespace FauFau.Formats
                 // uint inflated size
                 // uint padding
                 // ushort 0x78 0x01 zlib deflate low/no compression
-                uint inflatedSize = UIntFromBufferLE(ref data);
+                uint inflatedSize = UIntFromBufferLE(data);
                 inflated = new byte[inflatedSize];
                 Inflate(data, ref inflated, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, (int)inflatedSize, 10);
                 ibs = new BinaryStream(new MemoryStream(inflated));
@@ -944,7 +944,7 @@ namespace FauFau.Formats
 
                 for (int i = 0; i < x; i++)
                 {
-                    WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                    WriteToBufferLE(xor, mt.Next(), i * 4);
                 }
                 int z = (int)x * 4;
                 for (uint i = 0; i < y; i++)
@@ -979,7 +979,7 @@ namespace FauFau.Formats
 
                 for (int i = 0; i < x; i++)
                 {
-                    WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                    WriteToBufferLE(xor, mt.Next(), i * 4);
                 }
                 int z = (int)x * 4;
                 for (uint i = 0; i < y; i++)
@@ -1025,7 +1025,7 @@ namespace FauFau.Formats
 
                 for (int i = 0; i < x; i++)
                 {
-                    WriteToBufferLE(ref xor, mt.Next(), i * 4);
+                    WriteToBufferLE(xor, mt.Next(), i * 4);
                 }
                 int z = (int)x * 4;
                 for (uint i = 0; i < y; i++)
@@ -1042,8 +1042,6 @@ namespace FauFau.Formats
         }
         private byte[] DBTypeToBytes(DBType type, object data)
         {
-
-            FloatByteMap floatMap = new FloatByteMap();
             byte[] bytes = null;
 
             switch (type)
@@ -1060,7 +1058,7 @@ namespace FauFau.Formats
                     bytes = new byte[uShortList.Count * 2];
                     for (int i = 0; i < uShortList.Count; i++)
                     {
-                        WriteToBufferLE(ref bytes, uShortList[i], i * 2);
+                        WriteToBufferLE(bytes, uShortList[i], i * 2);
                     }
                     break;
                 case DBType.UIntArray:
@@ -1068,7 +1066,7 @@ namespace FauFau.Formats
                     bytes = new byte[uIntList.Count * 4];
                     for (int i = 0; i < uIntList.Count; i++)
                     {
-                        WriteToBufferLE(ref bytes, uIntList[i], i * 4);
+                        WriteToBufferLE(bytes, uIntList[i], i * 4);
                     }
                     break;
                 case DBType.Vector2Array:
@@ -1077,8 +1075,8 @@ namespace FauFau.Formats
                     bytes = new byte[vector2List.Count * 8];
                     for (int i = 0, x = 0; i < vector2List.Count; i++, x += 8)
                     {
-                        WriteToBufferLE(ref bytes, ref floatMap, vector2List[i].x, x);
-                        WriteToBufferLE(ref bytes, ref floatMap, vector2List[i].y, x + 4);
+                        WriteToBufferLE(bytes, vector2List[i].x, x);
+                        WriteToBufferLE(bytes, vector2List[i].y, x + 4);
                     }
                     break;
                 case DBType.Vector3Array:
@@ -1086,9 +1084,9 @@ namespace FauFau.Formats
                     bytes = new byte[vector3List.Count * 12];
                     for (int i = 0, x = 0; i < vector3List.Count; i++, x += 12)
                     {
-                        WriteToBufferLE(ref bytes, ref floatMap, vector3List[i].x, x);
-                        WriteToBufferLE(ref bytes, ref floatMap, vector3List[i].y, x + 4);
-                        WriteToBufferLE(ref bytes, ref floatMap, vector3List[i].z, x + 8);
+                        WriteToBufferLE(bytes, vector3List[i].x, x);
+                        WriteToBufferLE(bytes, vector3List[i].y, x + 4);
+                        WriteToBufferLE(bytes, vector3List[i].z, x + 8);
                     }
                     break;
                 case DBType.Vector4Array:
@@ -1096,10 +1094,10 @@ namespace FauFau.Formats
                     bytes = new byte[vector4List.Count * 16];
                     for (int i = 0, x = 0; i < vector4List.Count; i++, x += 16)
                     {
-                        WriteToBufferLE(ref bytes, ref floatMap, vector4List[i].x, x);
-                        WriteToBufferLE(ref bytes, ref floatMap, vector4List[i].y, x + 4);
-                        WriteToBufferLE(ref bytes, ref floatMap, vector4List[i].z, x + 8);
-                        WriteToBufferLE(ref bytes, ref floatMap, vector4List[i].w, x + 12);
+                        WriteToBufferLE(bytes, vector4List[i].x, x);
+                        WriteToBufferLE(bytes, vector4List[i].y, x + 4);
+                        WriteToBufferLE(bytes, vector4List[i].z, x + 8);
+                        WriteToBufferLE(bytes, vector4List[i].w, x + 12);
                     }
                     break;
             }
@@ -1107,8 +1105,6 @@ namespace FauFau.Formats
         }
         private object BytesToDBType(DBType type, byte[] data)
         {
-            FloatByteMap floatMap = new FloatByteMap();
-
             switch (type)
             {
                 case DBType.String:
@@ -1124,7 +1120,7 @@ namespace FauFau.Formats
                     {
                         for (int i = 0; i < data.Length; i += 2)
                         {
-                            uShortList.Add(UShortFromBufferLE(ref data, i));
+                            uShortList.Add(UShortFromBufferLE(data, i));
                         }
                     }
                     return uShortList;
@@ -1134,7 +1130,7 @@ namespace FauFau.Formats
                     {
                         for (int i = 0; i < data.Length; i += 4)
                         {
-                            uIntList.Add(UIntFromBufferLE(ref data, i));
+                            uIntList.Add(UIntFromBufferLE(data, i));
                         }
                     }
                     return uIntList;
@@ -1146,8 +1142,8 @@ namespace FauFau.Formats
                         for (int i = 0; i < data.Length; i += 8)
                         {
                             Vector2 v2 = new Vector2();
-                            v2.x = FloatFromBufferLE(ref data, ref floatMap, i);
-                            v2.y = FloatFromBufferLE(ref data, ref floatMap, i + 4);
+                            v2.x = FloatFromBufferLE(data, i);
+                            v2.y = FloatFromBufferLE(data, i + 4);
                             vector2List.Add(v2);
                         }
                     }
@@ -1160,9 +1156,9 @@ namespace FauFau.Formats
                         for (int i = 0; i < data.Length; i += 12)
                         {
                             Vector3 v3 = new Vector3();
-                            v3.x = FloatFromBufferLE(ref data, ref floatMap, i);
-                            v3.y = FloatFromBufferLE(ref data, ref floatMap, i + 4);
-                            v3.z = FloatFromBufferLE(ref data, ref floatMap, i + 8);
+                            v3.x = FloatFromBufferLE(data, i);
+                            v3.y = FloatFromBufferLE(data, i + 4);
+                            v3.z = FloatFromBufferLE(data, i + 8);
                             vector3List.Add(v3);
                         }
                     }
@@ -1175,10 +1171,10 @@ namespace FauFau.Formats
                         for (int i = 0; i < data.Length; i += 16)
                         {
                             Vector4 v4 = new Vector4();
-                            v4.x = FloatFromBufferLE(ref data, ref floatMap, i);
-                            v4.y = FloatFromBufferLE(ref data, ref floatMap, i + 4);
-                            v4.z = FloatFromBufferLE(ref data, ref floatMap, i + 8);
-                            v4.w = FloatFromBufferLE(ref data, ref floatMap, i + 12);
+                            v4.x = FloatFromBufferLE(data, i);
+                            v4.y = FloatFromBufferLE(data, i + 4);
+                            v4.z = FloatFromBufferLE(data, i + 8);
+                            v4.w = FloatFromBufferLE(data, i + 12);
                             vector4List.Add(v4);
                         }
                     }
