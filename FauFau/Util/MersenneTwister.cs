@@ -21,13 +21,18 @@ namespace FauFau.Util
 
         private void Init(uint seed = 5489)
         {
-            mt = new uint[n + 1];
+            mt ??= new uint[n + 1]; // Allocate only once
             mt[0] = seed & 0xffffffffU;
             for (mti = 1; mti < n; mti++)
             {
                 mt[mti] = (0x6C078965U * (mt[mti - 1] ^ (mt[mti - 1] >> 30)) + mti);
                 mt[mti] &= 0xffffffffU;
             }
+        }
+        
+        public void Reseed(uint seed = 5489)
+        {
+            Init(seed);
         }
 
         public uint Next()

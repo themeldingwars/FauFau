@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Bitter;
 using FauFau.Util;
@@ -27,6 +28,9 @@ namespace FauFau.Formats
         private static Dictionary<string, uint> stringHashLookup = new ();
         private static Dictionary<ulong, byte[]> uniqueEntries1000 = new ();
         private static Dictionary<uint, byte[]> uniqueEntries1002 = new ();
+
+        // One MersenneTwister per thread & reseed per entry
+        private static readonly ThreadLocal<MersenneTwister> threadMt = new (() => new MersenneTwister());
 
         #region File read & write
         public override void Read(BinaryStream bs)
@@ -936,7 +940,8 @@ namespace FauFau.Formats
             byte[] ret = null;
             if (length > 0)
             {
-                MersenneTwister mt = new MersenneTwister(key);
+                MersenneTwister mt = threadMt.Value;
+                mt.Reseed(key);
                 uint x = length >> 2;
                 uint y = length & 3;
 
@@ -970,7 +975,8 @@ namespace FauFau.Formats
             bs.ByteOffset = address;
             if (length > 0)
             {
-                MersenneTwister mt = new MersenneTwister((uint)row);
+                MersenneTwister mt = threadMt.Value;
+                mt.Reseed((uint)row);
                 uint x = length >> 2;
                 uint y = length & 3;
 
@@ -1016,7 +1022,8 @@ namespace FauFau.Formats
 
             if (length > 0)
             {
-                MersenneTwister mt = new MersenneTwister(key);
+                MersenneTwister mt = threadMt.Value;
+                mt.Reseed(key);
                 uint x = length >> 2;
                 uint y = length & 3;
 
