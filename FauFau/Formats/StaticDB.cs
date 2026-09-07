@@ -190,11 +190,8 @@ namespace FauFau.Formats
 
                 BinaryStream dbs = new BinaryStream(new MemoryStream(inflated));
 
-                while (tableRowsReadQueue.Count != 0)
+                while (tableRowsReadQueue.TryDequeue(out int i))
                 {
-                    int i;
-                    if (!tableRowsReadQueue.TryDequeue(out i)) continue;
-
                     TableInfo tableInfo = tableInfos[i];
                     FieldInfo[] fieldInfo = fieldInfos[i];
                     RowInfo rowInfo = rowInfos[i];
@@ -295,10 +292,8 @@ namespace FauFau.Formats
             Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i =>
             {
                 BinaryStream dbs = new BinaryStream(new MemoryStream(dataBlock));
-                while (uniqueQueue.Count != 0)
+                while (uniqueQueue.TryDequeue(out (ulong, int) pair))
                 {
-                    (ulong, int) pair;
-                    if (!uniqueQueue.TryDequeue(out pair)) continue;
                     byte[] d = GetDataEntry(dbs, pair.Item1, pair.Item2);
 
                     lock (uniqueEntries1000)
@@ -373,10 +368,8 @@ namespace FauFau.Formats
             Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i =>
             {
                 BinaryStream dbs = new BinaryStream(new MemoryStream(dataBlock));
-                while (uniqueQueue.Count != 0)
+                while (uniqueQueue.TryDequeue(out uint key))
                 {
-                    uint key;
-                    if (!uniqueQueue.TryDequeue(out key)) continue;
                     byte[] d = GetDataEntry(dbs, key);
 
                     lock (uniqueEntries1002)
