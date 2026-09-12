@@ -6,7 +6,8 @@ on:
     types: [opened, reopened]
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
 
 defaults:
   run:
@@ -39,8 +40,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
           submodules: 'recursive'
-            
+
       - name: Setup ${{ matrix.dotnet.name }} SDK
         id: setup-dotnet
         uses: actions/setup-dotnet@v6
@@ -49,7 +51,7 @@ jobs:
       - name: Enforce SDK Version
         env:
           DOTNET_VERSION: ${{ steps.setup-dotnet.outputs.dotnet-version }}
-        run: dotnet new globaljson --sdk-version $env:DOTNET_VERSION --force
+        run: dotnet new globaljson --sdk-version "$DOTNET_VERSION" --force
       - name: Verify SDK Installation
         run: dotnet --info
 
@@ -59,34 +61,16 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Create NuGet package
-        run: dotnet pack -c Release FauFau/FauFau.csproj --output $NUGET_DIRECTORY
-      - name: Publish NuGet package as artifact
-        if: matrix.platform.name == 'Linux' && matrix.dotnet.name == '.NET 8'
-        uses: actions/upload-artifact@v7
-        with:
-          name: FauFau
-          if-no-files-found: error
-          retention-days: 7
-          path: ${{ env.NUGET_DIRECTORY }}/*.*nupkg
+        run: dotnet pack --no-build -c Release FauFau/FauFau.csproj --output "$NUGET_DIRECTORY"
 
-  deploy:
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
-    needs: [ build ]
-    permissions:
-      id-token: write
- 
-    steps:
-      - uses: actions/download-artifact@v7
-        with:
-          name: FauFau
-          path: ${{ env.NUGET_DIRECTORY }}
       - name: NuGet Login
+        if: matrix.platform.name == 'Linux' && matrix.dotnet.name == '.NET 8' && startsWith(github.ref, 'refs/tags/v')
         uses: NuGet/login@v1
         id: login
         with:
           user: TMW
       - name: Publish FauFau NuGet
+        if: matrix.platform.name == 'Linux' && matrix.dotnet.name == '.NET 8' && startsWith(github.ref, 'refs/tags/v')
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: dotnet nuget push $NUGET_DIRECTORY/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push "$NUGET_DIRECTORY"/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
