@@ -7,11 +7,14 @@
       
     <!-- NuGet Package Information -->
     <PackageId>FauFau</PackageId>
-    <Authors>TheMeldingWars</Authors>
+    <Authors>The Melding Wars</Authors>
     <Description>FauFau is a library for manipulating FireFall's various file formats and protocols</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RepositoryUrl>https://github.com/themeldingwars/FauFau</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/themeldingwars/FauFau</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageTags>firefall;mmo;protocol;file-format;matrix;sdb</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

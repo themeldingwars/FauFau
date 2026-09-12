@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <Company>The Melding Wars</Company>
+    <Product>FauFau</Product>
+    <Copyright>Copyright © 2019-2026 The Melding Wars</Copyright>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+</Project>
