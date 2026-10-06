@@ -92,7 +92,8 @@ namespace FauFau.Tests
             patcher.FileData[4 + 8].ShouldBe((byte)0x90);
             patcher.FileData[4 + 9].ShouldBe((byte)0x90);
             patcher.FileData[18 + 13].ShouldBe((byte)0x75);
-            patcher.FileData[36 + 15].ShouldBe((byte)0x75);
+            patcher.FileData[36 + 15].ShouldBe((byte)0x90);
+            patcher.FileData[36 + 16].ShouldBe((byte)0x90);
         }
 
         [TestMethod]

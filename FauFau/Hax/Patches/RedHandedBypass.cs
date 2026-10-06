@@ -28,7 +28,7 @@ namespace FauFau.Hax.Patches
             var applyiedPatches = new List<PatchedDataBackup>();
             applyiedPatches.Add(Patchy.PatchData(found1 + 8, new byte[] { NOP, NOP }));
             applyiedPatches.Add(Patchy.PatchData(found2 + pattern2.Length - 1, new byte[] { 0x75 }));
-            applyiedPatches.Add(Patchy.PatchData(found3 + pattern3.Length, new byte[] { 0x75 }));
+            applyiedPatches.Add(Patchy.PatchData(found3 + pattern3.Length, new byte[] { NOP, NOP }));
 
             var result = new PatchResult()
             {
