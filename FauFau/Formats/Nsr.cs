@@ -1,6 +1,7 @@
 using Bitter;
 using FauFau.Util.CommmonDataTypes;
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Globalization;
@@ -33,46 +34,83 @@ namespace FauFau.Formats
         public override void Read(BinaryStream bs)
         {
             bs.ByteOffset = 0;
-            byte[] data = bs.Read.ByteArray((int)bs.Length);
+            byte[] file = bs.Read.ByteArray((int)bs.Length);
 
-            GzipLayers = 0;
-            Truncated = false;
-            while (data.Length >= 2 && data[0] == 0x1F && data[1] == 0x8B && GzipLayers < MaxGzipLayers)
+            ArrayPool<byte> pool = ArrayPool<byte>.Shared;
+            byte[] data = Unpack(file, file.Length, pool, out int length, out GzipLayers, out Truncated);
+            try
             {
-                data = Gunzip(data, out bool cutOff);
-                Truncated |= cutOff;
-                GzipLayers++;
+                Compressed = GzipLayers > 0;
+                if (length == 0)
+                {
+                    return;
+                }
+
+                using (BinaryStream payload = new BinaryStream(new MemoryStream(data, 0, length, false)))
+                {
+                    int position = ReadSections(payload, out Description, out Index, out Meta);
+                    ReadPackets(data, length, position);
+                }
             }
-            Compressed = GzipLayers > 0;
-
-            if (data.Length == 0)
+            finally
             {
-                return;
-            }
-
-            using (BinaryStream payload = new BinaryStream(new MemoryStream(data)))
-            {
-                ReadPayload(payload, data);
+                if (data != file)
+                {
+                    pool.Return(data);
+                }
             }
         }
 
-        private static byte[] Gunzip(byte[] data, out bool cutOff)
+        // Unpacks the gzip layers of a replay into a buffer rented from the pool, or returns data if it isn't packed
+        internal static byte[] Unpack(byte[] data, int length, ArrayPool<byte> pool, out int unpackedLength, out int layers, out bool truncated)
+        {
+            byte[] current = data;
+            layers = 0;
+            truncated = false;
+            while (length >= 2 && current[0] == 0x1F && current[1] == 0x8B && layers < MaxGzipLayers)
+            {
+                byte[] unpacked = Gunzip(current, length, pool, out length, out bool cutOff);
+                if (current != data)
+                {
+                    pool.Return(current);
+                }
+                current = unpacked;
+                truncated |= cutOff;
+                layers++;
+            }
+
+            unpackedLength = length;
+            return current;
+        }
+
+        private static byte[] Gunzip(byte[] data, int length, ArrayPool<byte> pool, out int unpackedLength, out bool cutOff)
         {
             cutOff = false;
+
             // The trailer has the unpacked size, unless the file is cut off
-            uint expectedSize = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(data.Length - 4));
-            using MemoryStream inflated = new MemoryStream(expectedSize < 512 * 1024 * 1024 ? (int)expectedSize : 0);
-            using (GZipStream gzip = new GZipStream(new MemoryStream(data), CompressionMode.Decompress))
+            uint expectedSize = length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(length - 4)) : 0;
+            byte[] buffer = pool.Rent(expectedSize > 0 && expectedSize < 512 * 1024 * 1024 ? (int)expectedSize : System.Math.Max(length * 4, 4096));
+            int position = 0;
+            using (GZipStream gzip = new GZipStream(new MemoryStream(data, 0, length, false), CompressionMode.Decompress))
             {
-                // Small reads, since GZipStream throws at the cut and the data of that read is lost
-                byte[] buffer = new byte[4096];
                 try
                 {
+                    // Small reads, since GZipStream throws at the cut and the data of that read is lost
                     int read;
-                    while ((read = gzip.Read(buffer)) > 0)
+                    do
                     {
-                        inflated.Write(buffer, 0, read);
+                        if (position == buffer.Length)
+                        {
+                            byte[] bigger = pool.Rent(buffer.Length * 2);
+                            buffer.AsSpan(0, position).CopyTo(bigger);
+                            pool.Return(buffer);
+                            buffer = bigger;
+                        }
+
+                        read = gzip.Read(buffer, position, System.Math.Min(4096, buffer.Length - position));
+                        position += read;
                     }
+                    while (read > 0);
                 }
                 catch (InvalidDataException)
                 {
@@ -81,55 +119,54 @@ namespace FauFau.Formats
             }
 
             // A cut off stream doesn't always throw, so check the size in the trailer as well
-            cutOff |= expectedSize != (uint)inflated.Length;
-            return inflated.ToArray();
+            cutOff |= expectedSize != (uint)position;
+            unpackedLength = position;
+            return buffer;
         }
 
-        private void ReadPayload(BinaryStream bs, byte[] data)
+        // Reads the description, index and meta sections, returns the offset of the first packet
+        internal static int ReadSections(BinaryStream bs, out DescriptionSection description, out IndexSection index, out MetaSection meta)
         {
-            Description = bs.Read.Type<DescriptionSection>();
-            Index = new IndexSection();
+            description = bs.Read.Type<DescriptionSection>();
+            index = new IndexSection();
 
-            if (Description.Version == 2)
+            if (description.Version == 2)
             {
                 // The meta section follows the shorter description and the packets follow the meta section
-                Meta = bs.Read.Type<MetaSection>();
-                Description.TimeStamp = Meta.TimeStamp;
+                meta = bs.Read.Type<MetaSection>();
+                description.TimeStamp = meta.TimeStamp;
+                return (int)bs.ByteOffset;
             }
-            else
+
+            if (description._metaOffset < DescriptionSection.Length || description._metaLength < 0 ||
+                description._metaOffset + description._metaLength > description._dataOffset || description._dataOffset > bs.Length)
             {
-                if (Description._metaOffset < DescriptionSection.Length || Description._metaLength < 0 ||
-                    Description._metaOffset + Description._metaLength > Description._dataOffset || Description._dataOffset > bs.Length)
-                {
-                    throw new InvalidDataException($"Unexpected section offsets: meta {Description._metaOffset}+{Description._metaLength}, data {Description._dataOffset}");
-                }
-
-                // Older builds have no index section and an index offset of 0
-                if (Description._indexOffset != 0)
-                {
-                    bs.ByteOffset = Description._indexOffset;
-                    Index = bs.Read.Type<IndexSection>();
-                }
-
-                bs.ByteOffset = Description._metaOffset;
-                Meta = bs.Read.Type<MetaSection>();
-                bs.ByteOffset = Description._dataOffset;
-
-                // A few clients wrote garbage into the description time
-                if (Description.TimeStamp == DateTime.MinValue)
-                {
-                    Description.TimeStamp = Meta.TimeStamp;
-                }
+                throw new InvalidDataException($"Unexpected section offsets: meta {description._metaOffset}+{description._metaLength}, data {description._dataOffset}");
             }
 
-            ReadPackets(data, (int)bs.ByteOffset);
+            // Older builds have no index section and an index offset of 0
+            if (description._indexOffset != 0)
+            {
+                bs.ByteOffset = description._indexOffset;
+                index = bs.Read.Type<IndexSection>();
+            }
+
+            bs.ByteOffset = description._metaOffset;
+            meta = bs.Read.Type<MetaSection>();
+
+            // A few clients wrote garbage into the description time
+            if (description.TimeStamp == DateTime.MinValue)
+            {
+                description.TimeStamp = meta.TimeStamp;
+            }
+            return description._dataOffset;
         }
 
-        private void ReadPackets(byte[] data, int position)
+        private void ReadPackets(byte[] data, int length, int position)
         {
             // Roughly the average packet size of 1962 replays
-            Packets = new List<Packet>((data.Length - position) / 24);
-            while (data.Length - position >= Packet.HeaderLength)
+            Packets = new List<Packet>((length - position) / 24);
+            while (length - position >= Packet.HeaderLength)
             {
                 ReadOnlySpan<byte> header = data.AsSpan(position, Packet.HeaderLength);
                 Packet packet = new Packet
@@ -139,7 +176,7 @@ namespace FauFau.Formats
                     MessageId = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(6)),
                 };
                 position += Packet.HeaderLength;
-                if (data.Length - position < packet.Length)
+                if (length - position < packet.Length)
                 {
                     Truncated = true;
                     return;
@@ -150,7 +187,7 @@ namespace FauFau.Formats
                 Packets.Add(packet);
             }
 
-            if (position != data.Length)
+            if (position != length)
             {
                 Truncated = true;
             }
