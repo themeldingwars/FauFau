@@ -1,10 +1,8 @@
 using System;
-using System.Buffers.Text;
-using System.Runtime.InteropServices;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using FauFau.Util;
-using Microsoft.Extensions.ObjectPool;
 
 using ROSC = System.ReadOnlySpan<char>;
 using SC = System.Span<char>;
@@ -20,133 +18,82 @@ namespace FauFau.Net.Web
         public const string CIPHER_SALT           = @"-cipherSalt";
         public const string PASSFILE_SALT         = @"-Pa55fi1E_$4Lt-";
 
-        private const ulong X36 = 0x3636363636363636;
-        private const ulong X5C = 0x5C5C5C5C5C5C5C5C;
-
-        private static ObjectPool<Token> pool = new DefaultObjectPool<Token>(new DefaultPooledObjectPolicy<Token>());
-
+        private const int SHA1_LENGTH = 20;
+        private const int MAX_STACK_LENGTH = 512;
 
         public static SC GenerateUserId(ROSC email)
         {
-            Token token = pool.Get();
-            Span<byte> buffer = token.Buffer;
-            Span<byte> hash = buffer.Slice(0, 20);
-            Span<byte> work = buffer.Slice(20, email.Length + USER_ID_SALT.Length);
+            byte[] rented = null;
+            int length = Encoding.UTF8.GetByteCount(email) + USER_ID_SALT.Length;
+            Span<byte> work = length <= MAX_STACK_LENGTH ? stackalloc byte[length] : (rented = ArrayPool<byte>.Shared.Rent(length)).AsSpan(0, length);
 
-            Encoding.UTF8.GetBytes(email,  work);
-            Encoding.UTF8.GetBytes(USER_ID_SALT, work.Slice(email.Length));
+            int written = Encoding.UTF8.GetBytes(email, work);
+            LowerAscii(work.Slice(0, written));
+            Encoding.UTF8.GetBytes(USER_ID_SALT, work.Slice(written));
 
-            for (int i = 0; i < email.Length; i++)
-            {
-                if (work[i] > 64 && work[i] < 91)
-                {
-                    work[i] += 32;
-                }
-            }
+            Span<byte> hash = stackalloc byte[SHA1_LENGTH];
+            SHA1.HashData(work, hash);
+            Return(rented);
 
-            token.SHA1.TryComputeHash(work, hash, out _);
-            Base64.EncodeToUtf8(hash, work, out _, out _);
-
-            SC uid = new char[28];
-            Encoding.UTF8.GetChars(work.Slice(0, 28), uid);
-
-            pool.Return(token);
-            return uid;
+            return Convert.ToBase64String(hash).ToCharArray();
         }
 
         public static SC GenerateSecret(ROSC email, ROSC password, bool v2 = true)
         {
-            Token token = pool.Get();
-            Span<byte> buffer = token.Buffer;
-            Span<byte> hash = buffer.Slice(0, 20);
-            Span<byte> work = buffer.Slice(20);
+            byte[] rented = null;
+            int length = Encoding.UTF8.GetByteCount(email) + 1 + Encoding.UTF8.GetByteCount(password) + USER_AUTH_SALT.Length;
+            Span<byte> work = length <= MAX_STACK_LENGTH ? stackalloc byte[length] : (rented = ArrayPool<byte>.Shared.Rent(length)).AsSpan(0, length);
 
-            Encoding.UTF8.GetBytes(email,  work);
+            int written = Encoding.UTF8.GetBytes(email, work);
+            LowerAscii(work.Slice(0, written));
+            work[written++] = (byte)'-';
+            written += Encoding.UTF8.GetBytes(password, work.Slice(written));
+            Encoding.UTF8.GetBytes(USER_AUTH_SALT, work.Slice(written));
 
-            for (int i = 0; i < email.Length; i++)
-            {
-                if (work[i] > 64 && work[i] < 91)
-                {
-                    work[i] += 32;
-                }
-            }
-
-            work[email.Length] = 0x2D; // -
-            work = work.Slice(email.Length + 1);
-
-            Encoding.UTF8.GetBytes(password,  work);
-            work = work.Slice(password.Length);
-
-            Encoding.UTF8.GetBytes(USER_AUTH_SALT, work);
-
-            token.SHA1.TryComputeHash(buffer.Slice(20, email.Length + password.Length + USER_AUTH_SALT.Length + 1), hash, out _);
+            Span<byte> hash = stackalloc byte[SHA1_LENGTH];
+            SHA1.HashData(work, hash);
+            Return(rented);
 
             if (v2)
             {
                 for (int i = 0; i < 199; i++)
                 {
-                    token.SHA1.TryComputeHash(hash, hash, out _);
+                    SHA1.HashData(hash, hash);
                 }
             }
 
-            SC secret = new char[40];
+            SC secret = new char[SHA1_LENGTH * 2];
             Common.TryWriteBytesAsHex(hash, secret, false);
-            pool.Return(token);
             return secret;
         }
+
+        // The token is a plain HMAC-SHA1 of the request string, keyed with the secret
         public static void GenerateToken(ROSC secret, ROSC headerData, SC tokenOut)
         {
-            Token token = pool.Get();
+            byte[] rented = null;
+            int keyLength = Encoding.UTF8.GetByteCount(secret);
+            int dataLength = Encoding.UTF8.GetByteCount(headerData);
+            int length = keyLength + dataLength;
+            Span<byte> work = length <= MAX_STACK_LENGTH ? stackalloc byte[length] : (rented = ArrayPool<byte>.Shared.Rent(length)).AsSpan(0, length);
 
-            Span<byte> buffer = token.Buffer;
-            Span<byte> left = buffer.Slice(0, 64);
-            Span<byte> right = buffer.Slice(64);
-            Span<ulong> xor = MemoryMarshal.Cast<byte, ulong>(buffer.Slice(0, 64));
+            Span<byte> key = work.Slice(0, keyLength);
+            Span<byte> data = work.Slice(keyLength);
+            Encoding.UTF8.GetBytes(secret, key);
+            Encoding.UTF8.GetBytes(headerData, data);
 
-            Encoding.UTF8.GetBytes(secret, left);
+            Span<byte> hash = stackalloc byte[SHA1_LENGTH];
+            HMACSHA1.HashData(key, data, hash);
+            Return(rented);
 
-            //for (int i = 0; i < 8; i++) { xor[i] ^= X36; }
-            xor[0] ^= X36;
-            xor[1] ^= X36;
-            xor[2] ^= X36;
-            xor[3] ^= X36;
-            xor[4] ^= X36;
-            xor[5] ^= X36;
-            xor[6] ^= X36;
-            xor[7] ^= X36;
-
-            Encoding.UTF8.GetBytes(headerData, right);
-
-            token.SHA1.TryComputeHash(buffer.Slice(0, 64 + headerData.Length), right, out _);
-
-            //left.Slice(40).Fill(0);
-            xor[5] = 0;
-            xor[6] = 0;
-            xor[7] = 0;
-
-            Encoding.UTF8.GetBytes(secret, left);
-
-            //for (int i = 0; i < 8; i++) { xor[i] ^= X5C; }
-            xor[0] ^= X5C;
-            xor[1] ^= X5C;
-            xor[2] ^= X5C;
-            xor[3] ^= X5C;
-            xor[4] ^= X5C;
-            xor[5] ^= X5C;
-            xor[6] ^= X5C;
-            xor[7] ^= X5C;
-
-            token.SHA1.TryComputeHash(buffer.Slice(0, 84), right, out _);
-            Common.TryWriteBytesAsHex(right.Slice(0, 20), tokenOut, false);
-
-            pool.Return(token);
+            Common.TryWriteBytesAsHex(hash, tokenOut, false);
         }
+
         public static bool Sign(ROSC secret, SC header)
         {
             if (header.Length <= 45 || !header.StartsWith(SIG_HEADER_START))
                 return false;
 
-            GenerateToken(secret, header.Slice(46), header.Slice(5, 40));;
+            GenerateToken(secret, header.Slice(46), header.Slice(5, 40));
             return true;
         }
         public static bool Verify(ROSC secret, ROSC header)
@@ -160,10 +107,23 @@ namespace FauFau.Net.Web
             return header.Slice(5, 40).SequenceEqual(generated);
         }
 
-        private class Token
+        private static void LowerAscii(Span<byte> bytes)
         {
-            public SHA1 SHA1 = SHA1.Create();
-            public byte[] Buffer = new byte[1024];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                if (bytes[i] >= 'A' && bytes[i] <= 'Z')
+                {
+                    bytes[i] += 32;
+                }
+            }
+        }
+
+        private static void Return(byte[] rented)
+        {
+            if (rented != null)
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
         }
     }
 }
