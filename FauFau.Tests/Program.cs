@@ -1,24 +1,10 @@
-﻿using System;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
-using FauFau.Net.Web;
-
-namespace FauFau.Tests
+﻿namespace FauFau.Tests
 {
     class Program
     {
         static void Main(string[] args)
         {
-            //Red5SigTests.Test1();
-
-            //GtChunksTests.TestLoa RowInfo rowInfo = rowInfos[i];d();
-
-            //AuthTests.VerifyBench();
-
-            //AuthTests.SecretBench();
-
-            //AuthTests.UserIdBench();
+            //GtChunksTests.TestLoad();
 
             //SDBTests.TestRead();
             //SDBTests.TestWriteCustom();
