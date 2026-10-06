@@ -503,7 +503,7 @@ namespace FauFau.Formats
                                         if ((key & 1) > 0) {
                                             data_bs.Write.UShort((ushort)dat.Length);
                                         }
-                                        byte[] twisted = TwistDataEntry(key, (byte[])dat.Clone());
+                                        byte[] twisted = Flags.HasFlag(HeaderFlags.Client) ? TwistDataEntry(key, (byte[])dat.Clone()) : dat;
                                         data_bs.Write.ByteArray(twisted);
 
                                         uniqueDataObjectKeys.Add(dat, key);
@@ -964,6 +964,11 @@ namespace FauFau.Formats
                 length = BitConverter.GetBytes(key)[3];
                 address = 0x7FFFFF & address;
                 bs.ByteOffset = address;
+            }
+
+            if (length > 0 && !Flags.HasFlag(HeaderFlags.Client))
+            {
+                return bs.Read.ByteArray((int)length);
             }
 
             if (length > 0)
@@ -1438,10 +1443,10 @@ namespace FauFau.Formats
         [Flags]
         public enum HeaderFlags : uint
         {
-            ObfuscatedPool          = 1U << 0,
+            ObfuscatedPool          = 1U << 0, // The whole payload is MT XORed
             BigEndian               = 1U << 1,
             Compressed              = 1U << 2,
-            Client                  = 1U << 3,
+            Client                  = 1U << 3, // Every pool entry is MT XORed with its key
             Server                  = 1u << 4,
         }
         private class HeaderInfo : ReadWrite

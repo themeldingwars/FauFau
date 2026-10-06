@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Bitter;
 using FauFau.Formats;
@@ -50,6 +52,16 @@ namespace FauFau.Tests
             StaticDB read = new StaticDB();
             read.Read(bytes);
             return read;
+        }
+
+        private static byte[] InflatePayload(byte[] file)
+        {
+            const int payloadStart = 128 + 4 + 4 + 2;
+            using MemoryStream compressed = new MemoryStream(file, payloadStart, file.Length - payloadStart);
+            using DeflateStream deflate = new DeflateStream(compressed, CompressionMode.Decompress);
+            using MemoryStream inflated = new MemoryStream();
+            deflate.CopyTo(inflated);
+            return inflated.ToArray();
         }
 
         [TestMethod]
@@ -125,6 +137,33 @@ namespace FauFau.Tests
 
             read.Flags.ShouldBe((HeaderFlags)0);
             read.GetTableByName(TableName)[1].Fields.ShouldBe(new object[] { 2U, "second", null });
+        }
+
+        [TestMethod]
+        [DataRow(HeaderFlags.Compressed, true)]
+        [DataRow(HeaderFlags.Compressed | HeaderFlags.Client, false)]
+        public void Write_ClientFlag_EncryptsPoolEntries(HeaderFlags flags, bool plainText)
+        {
+            StaticDB sdb = CreateSample();
+            sdb.Flags = flags;
+
+            sdb.Write(out byte[] bytes);
+            bool containsText = InflatePayload(bytes).AsSpan().IndexOf(Encoding.UTF8.GetBytes("second")) >= 0;
+
+            containsText.ShouldBe(plainText);
+        }
+
+        [TestMethod]
+        [DataRow(HeaderFlags.Compressed)]
+        [DataRow(HeaderFlags.ObfuscatedPool | HeaderFlags.Compressed | HeaderFlags.Client)]
+        public void WriteRead_PoolFlags_KeepsRows(HeaderFlags flags)
+        {
+            StaticDB sdb = CreateSample();
+            sdb.Flags = flags;
+
+            Table table = RoundTrip(sdb).GetTableByName(TableName);
+
+            table[1].Fields.ShouldBe(new object[] { 2U, "second", null });
         }
 
         [TestMethod]
