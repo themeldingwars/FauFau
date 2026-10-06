@@ -19,7 +19,9 @@ namespace FauFau.Tests
             stream.Write.Long(1461290437107);
             stream.Write.Int(name.Length + 1);
             stream.Write.ByteArray(Encoding.ASCII.GetBytes(name + "\0"));
-            stream.Write.UInt(0xDEADBEEF);
+            stream.Write.ULong(GtLayer.Marker);
+            stream.Write.UInt(Zone.RootLayerId);
+            stream.Write.UInt(0);
             stream.ByteOffset = 0;
             return stream;
         }
@@ -32,13 +34,13 @@ namespace FauFau.Tests
             Zone zone = new Zone();
 
             zone.Read(stream);
-            uint next = stream.Read.UInt();
 
             zone.Magic.ShouldBe("ZONE");
             zone.Version.ShouldBe(8);
             zone.TimeStamp.ShouldBe(new DateTime(2016, 4, 22, 2, 0, 37, 107, DateTimeKind.Utc));
             zone.Name.ShouldBe("New Eden");
-            next.ShouldBe(0xDEADBEEF);
+            zone.Root.Id.ShouldBe(Zone.RootLayerId);
+            stream.ByteOffset.ShouldBe(stream.Length);
         }
     }
 }
