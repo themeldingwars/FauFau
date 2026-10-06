@@ -42,7 +42,7 @@ namespace FauFau.Hax
         {
             var result = Patch.Apply(this);
 
-            if (!ApplyiedPatches.ContainsKey(Patch.ID))
+            if (result.Success && !ApplyiedPatches.ContainsKey(Patch.ID))
             {
                 ApplyiedPatches.Add(Patch.ID, result);
             }
@@ -85,11 +85,12 @@ namespace FauFau.Hax
             return bk;
         }
 
+        // Roll back in reverse order, so overlapping patches restore the original data
         public void RollBackPatches(PatchedDataBackup[] BackedUpPatches)
         {
-            foreach (var patch in BackedUpPatches)
+            for (int i = BackedUpPatches.Length - 1; i >= 0; i--)
             {
-                PatchData(patch.Offset, patch.Data);
+                PatchData(BackedUpPatches[i].Offset, BackedUpPatches[i].Data);
             }
         }
 

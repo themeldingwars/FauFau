@@ -10,6 +10,11 @@
         public override PatchResult Apply(Patcher Patchy)
         {
             var offset       = Patchy.GetSimpleOffset(Pattern);
+            if (offset < 0)
+            {
+                return new PatchResult() { Success = false, Message = $"{Pattern} wasn't found, the client version is probably not supported" };
+            }
+
             var replaceStart = offset + Pattern.Length + 3;
             var bk           = Patchy.PatchData(replaceStart, PatchData);
 
