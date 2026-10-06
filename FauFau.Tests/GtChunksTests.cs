@@ -2,7 +2,7 @@
 using System.IO;
 using FauFau.Formats;
 
-namespace Tests
+namespace FauFau.Tests
 {
     public class GtChunksTests
     {
@@ -13,7 +13,7 @@ namespace Tests
             var chunk = new GtChunkV8();
             chunk.Load(gtChunkPath);
 
-            WriteCompressedChunksToDisk(chunk, @"C:\NonWindows\Projects\FauFau\Tests\gtchunkNodes");
+            WriteCompressedChunksToDisk(chunk, @"C:\NonWindows\Projects\FauFau\FauFau.Tests\gtchunkNodes");
 
             //chunk.GetDecompressedLod(0);
 

@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using FauFau.Net.Web;
 
-namespace Tests
+namespace FauFau.Tests
 {
     public static class AuthTests
     {

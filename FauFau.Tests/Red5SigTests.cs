@@ -6,7 +6,7 @@ using System.Text;
 using BenchmarkDotNet.Attributes;
 using FauFau.Net.Web;
 
-namespace Tests
+namespace FauFau.Tests
 {
     public class Red5SigTests
     {

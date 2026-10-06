@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using FauFau.Net.Web;
 
-namespace Tests
+namespace FauFau.Tests
 {
     class Program
     {

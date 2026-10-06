@@ -2,7 +2,7 @@
 using FauFau.Formats;
 using static FauFau.Formats.StaticDB;
 
-namespace Tests
+namespace FauFau.Tests
 {
     public class SDBTests
     {
