@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 
 namespace FauFau.Util
 {
@@ -33,13 +34,13 @@ namespace FauFau.Util
         }
         public static string ZuluTime(DateTime ts)
         {
-            string t = ClockAsFloat(ts).ToString("0.000");
+            string t = ClockAsFloat(ts).ToString("0.000", CultureInfo.InvariantCulture);
             return t.Substring(t.Length - 3);
         }
 
         public static string FictionalTimeString(DateTime ts)
         {
-            return ts.ToString("dddd, MMMM dd.") + ZuluTime(ts) + " Zulu " + ts.Year;
+            return ts.ToString("dddd, MMMM dd.", CultureInfo.InvariantCulture) + ZuluTime(ts) + " Zulu " + ts.Year;
         }
     }
 }

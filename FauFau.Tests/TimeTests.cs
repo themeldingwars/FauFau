@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using FauFau.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shouldly;
@@ -35,6 +36,25 @@ namespace FauFau.Tests
 
             microseconds.ShouldBe(expected);
             converted.ShouldBe(Sample);
+        }
+
+        [TestMethod]
+        public void FictionalTimeString_IgnoresCurrentCulture()
+        {
+            CultureInfo previous = CultureInfo.CurrentCulture;
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+
+            string text;
+            try
+            {
+                text = Time.FictionalTimeString(new DateTime(2239, 11, 15, 18, 0, 0));
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = previous;
+            }
+
+            text.ShouldBe("Friday, November 15.750 Zulu 2239");
         }
 
         [TestMethod]

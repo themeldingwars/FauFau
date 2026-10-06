@@ -1,13 +1,27 @@
-﻿using Bitter;
+using Bitter;
 using FauFau.Util.CommmonDataTypes;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.IO.Compression;
+using BinaryReader = Bitter.BinaryReader;
+using BinaryWriter = Bitter.BinaryWriter;
 
 namespace FauFau.Formats
 {
     public class Nsr : BinaryWrapper
     {
+        private const int MaxGzipLayers = 4;
+
         public bool Compressed = false;
+
+        // Some replays were packed more than once, 0 for an unpacked one
+        public int GzipLayers;
+
+        // Set when the gzip stream or the last packet is cut off, Packets then holds everything before the cut
+        public bool Truncated;
 
         public DescriptionSection Description = new ();
         public IndexSection Index = new ();
@@ -18,68 +32,154 @@ namespace FauFau.Formats
 
         public override void Read(BinaryStream bs)
         {
-            using (BinaryStream payload = new BinaryStream())
+            bs.ByteOffset = 0;
+            byte[] data = bs.Read.ByteArray((int)bs.Length);
+
+            GzipLayers = 0;
+            Truncated = false;
+            while (data.Length >= 2 && data[0] == 0x1F && data[1] == 0x8B && GzipLayers < MaxGzipLayers)
             {
-                // check if compressed
+                data = Gunzip(data, out bool cutOff);
+                Truncated |= cutOff;
+                GzipLayers++;
+            }
+            Compressed = GzipLayers > 0;
 
-                uint magic = bs.Read.UInt();
-                bs.ByteOffset = 0;
+            if (data.Length == 0)
+            {
+                return;
+            }
 
-                if (magic == 559903)
-                {
-                    try
-                    {
-                        Util.Common.UnGzipUnknownTargetSize(bs, payload);
-                        Compressed = true;
-                    }
-                    catch
-                    {
-                        payload.ByteOffset = 0;
-                        payload.Write.ByteArray(bs.Read.ByteArray((int)bs.Length));
-                    }
-                }
-                else
-                {
-                    payload.Write.ByteArray(bs.Read.ByteArray((int)bs.Length));
-                    Console.WriteLine(payload.Length);
-                }
-
-                bs.Dispose();
-
-                payload.ByteOffset = 0;
-
-                if (payload.Length == 0)
-                {
-                    Compressed = false;
-                    return;
-                }
-
+            using (BinaryStream payload = new BinaryStream(new MemoryStream(data)))
+            {
                 ReadPayload(payload);
             }
         }
+
+        private static byte[] Gunzip(byte[] data, out bool cutOff)
+        {
+            cutOff = false;
+            using MemoryStream inflated = new MemoryStream();
+            using (GZipStream gzip = new GZipStream(new MemoryStream(data), CompressionMode.Decompress))
+            {
+                // Small reads, since GZipStream throws at the cut and the data of that read is lost
+                byte[] buffer = new byte[4096];
+                try
+                {
+                    int read;
+                    while ((read = gzip.Read(buffer)) > 0)
+                    {
+                        inflated.Write(buffer, 0, read);
+                    }
+                }
+                catch (InvalidDataException)
+                {
+                    cutOff = true;
+                }
+            }
+
+            // A cut off stream doesn't always throw, so check the size in the trailer as well
+            uint expectedSize = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(data.Length - 4));
+            cutOff |= expectedSize != (uint)inflated.Length;
+            return inflated.ToArray();
+        }
+
         private void ReadPayload(BinaryStream bs)
         {
             Description = bs.Read.Type<DescriptionSection>();
-            Index = bs.Read.Type<IndexSection>();
-            Meta = bs.Read.Type<MetaSection>();
-            Packets = new List<Packet>();
-            while (!bs.EndOfStream)
+            Index = new IndexSection();
+
+            if (Description.Version == 2)
             {
-                Packets.Add(bs.Read.Type<Packet>());
+                // The meta section follows the shorter description and the packets follow the meta section
+                Meta = bs.Read.Type<MetaSection>();
+                Description.TimeStamp = Meta.TimeStamp;
+            }
+            else
+            {
+                if (Description._metaOffset < DescriptionSection.Length || Description._metaLength < 0 ||
+                    Description._metaOffset + Description._metaLength > Description._dataOffset || Description._dataOffset > bs.Length)
+                {
+                    throw new InvalidDataException($"Unexpected section offsets: meta {Description._metaOffset}+{Description._metaLength}, data {Description._dataOffset}");
+                }
+
+                // Older builds have no index section and an index offset of 0
+                if (Description._indexOffset != 0)
+                {
+                    bs.ByteOffset = Description._indexOffset;
+                    Index = bs.Read.Type<IndexSection>();
+                }
+
+                bs.ByteOffset = Description._metaOffset;
+                Meta = bs.Read.Type<MetaSection>();
+                bs.ByteOffset = Description._dataOffset;
+
+                // A few clients wrote garbage into the description time
+                if (Description.TimeStamp == DateTime.MinValue)
+                {
+                    Description.TimeStamp = Meta.TimeStamp;
+                }
+            }
+
+            ReadPackets(bs);
+        }
+
+        private void ReadPackets(BinaryStream bs)
+        {
+            Packets = new List<Packet>();
+            while (bs.Length - bs.ByteOffset >= Packet.HeaderLength)
+            {
+                Packet packet = new Packet();
+                packet.ReadHeader(bs);
+                if (bs.Length - bs.ByteOffset < packet.Length)
+                {
+                    Truncated = true;
+                    return;
+                }
+
+                packet.Data = bs.Read.ByteArray(packet.Length);
+                Packets.Add(packet);
+            }
+
+            if (bs.ByteOffset != bs.Length)
+            {
+                Truncated = true;
             }
         }
 
         public static string ReadNullTerminatedString(BinaryStream bs)
         {
+            long start = bs.ByteOffset;
             int len = 0;
-            while (bs.ByteOffset != bs.Length && bs.Read.Byte() != 0)
+            bool terminated = false;
+            while (bs.ByteOffset < bs.Length)
             {
+                if (bs.Read.Byte() == 0)
+                {
+                    terminated = true;
+                    break;
+                }
                 len++;
             }
-            bs.ByteOffset -= len + 1;
+
+            bs.ByteOffset = start;
             string ret = bs.Read.String(len);
-            bs.ByteOffset++;
+            if (terminated)
+            {
+                bs.ByteOffset++;
+            }
             return ret;
+        }
+
+        // Returns DateTime.MinValue for times that can't be right
+        private static DateTime ReadTime(BinaryReader read)
+        {
+            long microseconds = read.Long();
+            if (microseconds <= 0 || microseconds > Util.Time.UnixTimestampMicrosecondsFromDatetime(DateTime.MaxValue.AddYears(-1)))
+            {
+                return DateTime.MinValue;
+            }
+            return Util.Time.DateTimeFromUnixTimestampMicroseconds(microseconds);
         }
 
         public override void Write(BinaryStream bs)
@@ -88,8 +188,6 @@ namespace FauFau.Formats
             {
                 WritePayload(payload);
                 payload.ByteOffset = 0;
-
-                Console.WriteLine(payload.Length + "!");
 
                 if (Compressed)
                 {
@@ -108,7 +206,7 @@ namespace FauFau.Formats
             BinaryWriter Write = bs.Write;
 
             // skip the header until we know the offsets
-            bs.ByteOffset = 48;
+            bs.ByteOffset = DescriptionSection.Length;
             Description._indexOffset = (int)bs.ByteOffset;
             Write.Type(Index);
 
@@ -127,9 +225,15 @@ namespace FauFau.Formats
         // NSRD | Network Stream Replay Description
         public class DescriptionSection : ReadWrite
         {
+            public const int Length = 48;
+
+            // Version 2 (2012 builds) has a 24 byte description without section offsets, version 5 is always written
             public int Version = 5;
             public int ProtocolVersion = 19551;
             public DateTime TimeStamp = DateTime.UtcNow;
+
+            // Milliseconds between index entries, cvar replay.indexInterval
+            public int IndexInterval = 5000;
 
             public int _metaOffset;
             public int _metaLength;
@@ -139,29 +243,43 @@ namespace FauFau.Formats
             public void Read(BinaryStream bs)
             {
                 BinaryReader Read = bs.Read;
-                if (!Read.String(4).Equals("NSRD")) { Console.WriteLine("This is not a valid replay file >,>"); return; }
+                if (!Read.String(4).Equals("NSRD"))
+                {
+                    throw new InvalidDataException("Not a replay file, the NSRD section is missing");
+                }
 
                 Version = Read.Int();
+                if (Version == 2)
+                {
+                    ProtocolVersion = Read.Int();
+                    Read.Int(); // unknown
+                    Read.Long(); // unknown, not a unix time
+                    return;
+                }
+                if (Version != 5)
+                {
+                    throw new NotSupportedException($"NSR version {Version} isn't supported, only versions 2 and 5");
+                }
 
                 _metaOffset = Read.Int();
                 _metaLength = Read.Int();
                 _indexOffset = Read.Int();
                 _dataOffset = Read.Int();
 
-                if (Read.Int() != 0) { Console.WriteLine("First NSRD unk is not null!"); return; }
+                Read.Int(); // unknown, 0 in 1962
 
                 ProtocolVersion = Read.Int();
-                TimeStamp = Util.Time.DateTimeFromUnixTimestampMicroseconds(Read.Long());
+                TimeStamp = ReadTime(Read);
 
-                if (Read.Int() != 5000) { Console.WriteLine("NSRD 5000 is not 5000!!"); return; }
-                if (Read.Int() != 0) { Console.WriteLine("Second NSRD unk is not null!"); return; }
+                IndexInterval = Read.Int();
+                Read.Int(); // unknown
             }
 
             public void Write(BinaryStream bs)
             {
                 BinaryWriter Write = bs.Write;
                 Write.String("NSRD");
-                Write.Int(Version);
+                Write.Int(5);
 
                 Write.Int(_metaOffset);
                 Write.Int(_metaLength);
@@ -173,7 +291,7 @@ namespace FauFau.Formats
                 Write.Int(ProtocolVersion);
                 Write.Long(Util.Time.UnixTimestampMicrosecondsFromDatetime(TimeStamp));
 
-                Write.Int(5000);
+                Write.Int(IndexInterval);
                 Write.Int(0); // second unk
 
             }
@@ -183,16 +301,20 @@ namespace FauFau.Formats
         public class IndexSection : ReadWrite
         {
             public int Version = 5;
+
+            // Stream offsets of the keyframes, one every IndexInterval
             public List<uint> Offsets = new ();
 
             public void Read(BinaryStream bs)
             {
                 BinaryReader Read = bs.Read;
-                //bs.ByteOffset = indexOffset;
-                if (!Read.String(4).Equals("NSRI")) { Console.WriteLine("This is not a valid replay file >,>"); return; }
+                if (!Read.String(4).Equals("NSRI"))
+                {
+                    throw new InvalidDataException("Not a replay file, the NSRI section is missing");
+                }
 
                 Version = Read.Int();
-                if (Read.Long() != 0) { Console.WriteLine("NSRI unknown is not null"); return; }
+                Read.Long(); // unknown
                 int count = Read.Int();
                 Read.UInt(); // Index Offset
                 Offsets = Read.UIntList(count);
@@ -221,6 +343,8 @@ namespace FauFau.Formats
             public Vector4 Rotation;
             public ulong CharacterGUID;
             public string CharacterName;
+
+            // Two unknown bytes, the zone instance GUID and in version 4 a clock value the playback restores
             public byte[] Unk2;
             public string FirefallVersionString;
             public DateTime TimeStamp;
@@ -234,12 +358,14 @@ namespace FauFau.Formats
             public string FictionalDateString;
             public byte[] Unk3;
 
+            public ulong ZoneInstanceGuid => Unk2 != null && Unk2.Length >= 10 ? BinaryPrimitives.ReadUInt64LittleEndian(Unk2.AsSpan(2)) : 0;
+            public ulong ClockSync => Unk2 != null && Unk2.Length >= 18 ? BinaryPrimitives.ReadUInt64LittleEndian(Unk2.AsSpan(10)) : 0;
+
             public MetaSection()
             {
                 Version = 4;
                 ZoneId = 12;
                 Description = "(generated by faufau)";
-                LocalDateString = "";
                 Position = new Vector3();
                 Rotation = new Vector4 { x = 1f, y = 0f, z = 0f, w = 0f };
                 CharacterGUID = 0;
@@ -247,6 +373,9 @@ namespace FauFau.Formats
                 Unk2 = new byte[18];
                 FirefallVersionString = "Firefall (v1.5.1962)";
                 TimeStamp = DateTime.UtcNow;
+
+                // The client writes it with C's ctime
+                LocalDateString = TimeStamp.ToLocalTime().ToString("ddd MMM dd HH:mm:ss yyyy\n", CultureInfo.InvariantCulture);
 
                 DateTime fictionalTime = Util.Time.FictionalTimeNow();
 
@@ -263,7 +392,6 @@ namespace FauFau.Formats
             public void Read(BinaryStream bs)
             {
                 BinaryReader Read = bs.Read;
-                //bs.ByteOffset = metaOffset;
 
                 Version = Read.Int();
                 ZoneId = Read.Int();
@@ -276,10 +404,11 @@ namespace FauFau.Formats
                 CharacterGUID = Read.ULong();
                 CharacterName = ReadNullTerminatedString(bs);
 
-                Unk2 = Read.ByteArray(18);
+                // Version 3 has no clock value
+                Unk2 = Read.ByteArray(Version >= 4 ? 18 : 10);
 
                 FirefallVersionString = ReadNullTerminatedString(bs);
-                TimeStamp = Util.Time.DateTimeFromUnixTimestampMicroseconds(Read.Long());
+                TimeStamp = ReadTime(Read);
 
                 Month = Read.Int();
                 Day = Read.Int();
@@ -333,6 +462,8 @@ namespace FauFau.Formats
         // Packet
         public class Packet : ReadWrite
         {
+            public const int HeaderLength = 8;
+
             public uint TimeStamp;
             public ushort Length;
             public ushort MessageId;
@@ -340,11 +471,16 @@ namespace FauFau.Formats
 
             public void Read(BinaryStream bs)
             {
+                ReadHeader(bs);
+                Data = bs.Read.ByteArray(Length);
+            }
+
+            internal void ReadHeader(BinaryStream bs)
+            {
                 BinaryReader Read = bs.Read;
                 TimeStamp = Read.UInt();
                 Length = Read.UShort();
                 MessageId = Read.UShort();
-                Data = Read.ByteArray(Length);
             }
 
             public void Write(BinaryStream bs)
