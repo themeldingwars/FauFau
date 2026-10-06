@@ -93,7 +93,7 @@ namespace FauFau.Net.Web
             if (header.Length <= 45 || !header.StartsWith(SIG_HEADER_START))
                 return false;
 
-            GenerateToken(secret, header.Slice(46), header.Slice(5, 40));
+            GenerateToken(secret, GetRequest(header), header.Slice(5, 40));
             return true;
         }
         public static bool Verify(ROSC secret, ROSC header)
@@ -103,8 +103,16 @@ namespace FauFau.Net.Web
 
             SC generated = stackalloc char[40];
 
-            GenerateToken(secret, header.Slice(46), generated);
+            GenerateToken(secret, GetRequest(header), generated);
             return header.Slice(5, 40).SequenceEqual(generated);
+        }
+
+        // The client appends a second token after the request, signed with its hardware cookie
+        private static ROSC GetRequest(ROSC header)
+        {
+            ROSC request = header.Slice(46);
+            int end = request.IndexOf(' ');
+            return end < 0 ? request : request.Slice(0, end);
         }
 
         private static void LowerAscii(Span<byte> bytes)

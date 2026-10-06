@@ -111,6 +111,30 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
+        [DataRow(" ")]
+        [DataRow(" 4d43e3eab7b67f7bb7c47e031dc63f5506fec77b")]
+        public void Verify_HeaderWithSecondToken_Succeeds(string suffix)
+        {
+            string header = Header + suffix;
+
+            bool verified = Auth.Verify(SecretV2, header);
+
+            verified.ShouldBeTrue();
+        }
+
+        [TestMethod]
+        public void Sign_HeaderWithSecondToken_SignsOnlyRequest()
+        {
+            const string secondToken = " 4d43e3eab7b67f7bb7c47e031dc63f5506fec77b";
+            char[] header = ("Red5 " + new string('0', 40) + " " + Request + secondToken).ToCharArray();
+
+            bool signed = Auth.Sign(SecretV2, header);
+
+            signed.ShouldBeTrue();
+            new string(header).ShouldBe(Header + secondToken);
+        }
+
+        [TestMethod]
         public void Verify_WrongSecret_Fails()
         {
             bool verified = Auth.Verify(SecretV1, Header);
