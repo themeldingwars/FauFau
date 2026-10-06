@@ -50,9 +50,13 @@ namespace FauFau.Util
         }
 
         // Split on the given value and return the left and right values as key and value
+        // Without the value, the whole source is the key and the value is empty
         public static KeyValuePair SplitKVP(ReadOnlySpan<T> Source, T SplitOn)
         {
             var pos = Source.IndexOf(SplitOn);
+            if (pos < 0)
+                return new KeyValuePair { Key = Source, Value = ReadOnlySpan<T>.Empty };
+
             var kvp = new KeyValuePair
             {
                 Key   = Source.Slice(0, pos),
