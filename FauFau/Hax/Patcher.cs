@@ -52,23 +52,12 @@ namespace FauFau.Hax
 
         public long GetSimpleOffset(string Pattern)
         {
-            var patternAsBytes = Encoding.ASCII.GetBytes(Pattern);
-            var searchPattern  = BitConverter.ToString(patternAsBytes).Replace("-", " ");
-            var sig            = PatternFinder.Pattern.Transform(searchPattern);
-            PatternFinder.Pattern.FindAll(FileData, sig, out List<long> offsets);
-            var offset = offsets.Count > 0 ? offsets[0] : -1;
-
-            return offset;
+            return new BytePattern(Encoding.ASCII.GetBytes(Pattern)).Find(FileData);
         }
 
         public long GetSimpleOffset(byte[] Pattern)
         {
-            var searchPattern = BitConverter.ToString(Pattern).Replace("-", " ");
-            var sig           = PatternFinder.Pattern.Transform(searchPattern);
-            PatternFinder.Pattern.FindAll(FileData, sig, out List<long> offsets);
-            var offset = offsets.Count > 0 ? offsets[0] : -1;
-
-            return offset;
+            return new BytePattern(Pattern).Find(FileData);
         }
 
         public PatchedDataBackup PatchData(long Offset, byte[] Data)
