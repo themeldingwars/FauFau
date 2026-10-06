@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Numerics;
 using Bitter;
 using FauFau.Formats.GtChunk;
@@ -17,8 +18,8 @@ namespace FauFau.Formats
         public const ulong NODE_MARKER = 0x12ED5A12ED5B12ED;
 
         public RootNode         Root;
-        public DataBlock[]      DataBlocks;
-        public DatBlock[]       DatBlocks;
+        public Block[]          DataBlocks;
+        public Block[]          DatBlocks;
         public LodDataMapping[] LodDataMap;
 
         public void Load(string filePath)
@@ -55,13 +56,13 @@ namespace FauFau.Formats
 
             var lodDecompressed = new LodSubChunkData()
             {
-                LodData      = new byte[lod.UncompressedSize],
+                LodData      = DataBlocks[lodLevel].Decompress(),
                 SubChunkData = new byte[lod.NumSubchunks][]
             };
 
             int idx = 0;
             foreach (var subChunkId in lodData.DatBlockIds) {
-                lodDecompressed.SubChunkData[idx] = GetDecompressedSubChunk(subChunkId).ToArray();
+                lodDecompressed.SubChunkData[idx++] = GetDecompressedSubChunk(subChunkId).ToArray();
             }
 
             return lodDecompressed;
@@ -83,12 +84,11 @@ namespace FauFau.Formats
             using (var bs = new BinaryStream(new MemoryStream(sc.ToArray()))) {
                 while (bs.ByteOffset < bs.Length) {
                     var nodeHeader = ReadNodeHeader(bs);
-                    Console.WriteLine($" Node Offset: {bs.ByteOffset}");
 
                     switch ((NodeTypes) nodeHeader.NodeId) {
-                        case NodeTypes.GeoData:
-                        case NodeTypes.GeoData2:
-                        case NodeTypes.GeoData3:
+                        case NodeTypes.StaticGeometryCollision:
+                        case NodeTypes.MovementBlockerCollision:
+                        case NodeTypes.WaterCollision:
                         {
                             var geoData = new GtChunk_MeshData(bs, nodeHeader.Length);
                             var wrapper = new NodeDataWrapper(nodeHeader.NodeId, geoData);
@@ -98,7 +98,6 @@ namespace FauFau.Formats
 
                         default:
                         {
-                            Console.WriteLine($"SubChunk node Id: {nodeHeader.NodeId}");
                             var nodeData = bs.Read.ByteArray(nodeHeader.Length);
                             var wrapper  = new NodeDataWrapper(nodeHeader.NodeId, nodeData);
                             nodes.Add(wrapper);
@@ -115,42 +114,40 @@ namespace FauFau.Formats
         // load the compressed chunks into memory, doesn't decompress them
         private void LoadCompressedBlocks(BinaryStream bs)
         {
-            List<DatBlock> datBlocks           = new List<DatBlock>(100);
-            List<short>    datBlockLodMappings = new List<short>(100);
-            DataBlocks = new DataBlock[Root.NumLods];
+            // The block offsets are relative to the end of the root node
+            long dataStart = Node.HeaderLength + Root.Length;
+
+            List<Block> datBlocks           = new List<Block>(100);
+            List<short> datBlockLodMappings = new List<short>(100);
+            DataBlocks = new Block[Root.NumLods];
             LodDataMap = new LodDataMapping[Root.NumLods];
             for (int i = 0; i < DataBlocks.Length; i++) {
                 var lod = Root.LodNodes[i];
                 LodDataMap[i].DataBlockIdx = i;
 
-                // Data blocks
-                DataBlocks[i] = new DataBlock()
+                bs.ByteOffset = dataStart + lod.DataOffset;
+                DataBlocks[i] = new Block()
                 {
-                    CompressedSize   = lod.CompressedSize - 4, // id and unk ints
-                    UncompressedSize = lod.UncompressedSize,
-                    LodIdx           = i
+                    CompressedSize   = lod.CompressedSize,
+                    UncompressedSize = lod.UncompressedSize
                 };
-
                 DataBlocks[i].Read(bs);
 
-                // Dat blocks
                 datBlockLodMappings.Clear();
                 for (int j = 0; j < lod.NumSubchunks; j++) {
                     var subChunk = lod.SubChunkNodes[j];
                     datBlockLodMappings.Add((short) datBlocks.Count);
 
-                    var datBlock = new DatBlock()
+                    bs.ByteOffset = dataStart + subChunk.DataOffset;
+                    var datBlock = new Block()
                     {
-                        CompressedSize   = subChunk.CompressedSize - (4 + 5), // id and unk ints
-                        UncompressedSize = subChunk.UncompressedSize,
-                        LodIdx           = i,
-                        SubChunkIdx      = j
+                        CompressedSize   = subChunk.CompressedSize,
+                        UncompressedSize = subChunk.UncompressedSize
                     };
-
                     datBlock.Read(bs);
                     datBlocks.Add(datBlock);
-                    LodDataMap[i].DatBlockIds = datBlockLodMappings.ToArray();
                 }
+                LodDataMap[i].DatBlockIds = datBlockLodMappings.ToArray();
             }
 
             DatBlocks = datBlocks.ToArray();
@@ -172,18 +169,21 @@ namespace FauFau.Formats
             SubChunk = 262146,
 
             // Compressed block nodes
-            TerrainChunk     = 262400,
-            GeoData          = 262401,
-            GeoData2         = 262405,
-            GeoData3         = 262403,
-            PropEncNameReg   = 262660,
-            VegationChunk    = 262661,
-            VegationChunk2   = 262665,
-            OverlayChunk     = 262662,
-            SectorsChunk     = 262663,
-            WaterObjectChunk = 262664,
-            PropChunk        = 262656,
-            SubZoneGrid      = 262402,
+            TerrainChunk             = 262400,
+            StaticGeometryCollision  = 262401,
+            SubZoneGrid              = 262402,
+            MovementBlockerCollision = 262403,
+            EncounterNameRegistry2   = 262404,
+            WaterCollision           = 262405,
+            PropChunk                = 262656,
+            GeometryTree2            = 262659,
+            PropEncNameReg           = 262660,
+            VegetationChunk          = 262661,
+            OverlayChunk             = 262662,
+            SectorsChunk             = 262663,
+            WaterObjectChunk         = 262664,
+            VegetationChunk2         = 262665,
+            GeometryTree             = 262672,
         }
 
         // casting and boxing yay, but can revise later if its really an issue in how it ends up getting used
@@ -219,6 +219,8 @@ namespace FauFau.Formats
 
         public class Node : ReadWrite
         {
+            public const int HeaderLength = 16;
+
             public ulong NodeMarker;
             public uint  NodeId;
             public int   Length;
@@ -234,14 +236,14 @@ namespace FauFau.Formats
             {
             }
 
-            public void Read(BinaryStream bs)
+            public virtual void Read(BinaryStream bs)
             {
                 NodeMarker = bs.Read.ULong();
                 NodeId     = bs.Read.UInt();
                 Length     = bs.Read.Int();
             }
 
-            public void Write(BinaryStream bs)
+            public virtual void Write(BinaryStream bs)
             {
                 bs.Write.ULong(NODE_MARKER);
                 bs.Write.UInt(NodeId);
@@ -257,7 +259,9 @@ namespace FauFau.Formats
 
             public LodNode[] LodNodes;
 
-            public new void Read(BinaryStream bs)
+            public DateTime TimeStamp => Util.Time.DateTimeFromUnixTimestampMilliseconds((long)Timestamp);
+
+            public override void Read(BinaryStream bs)
             {
                 base.Read(bs);
                 Version   = bs.Read.UInt();
@@ -272,7 +276,7 @@ namespace FauFau.Formats
                 }
             }
 
-            public new void Write(BinaryStream bs)
+            public override void Write(BinaryStream bs)
             {
                 base.Write(bs);
                 bs.Write.UInt(Version);
@@ -289,18 +293,18 @@ namespace FauFau.Formats
         {
             public uint LodIdx;
             public uint NumSubchunks;
-            public uint UNK1;
+            public uint DataOffset;
             public int  CompressedSize;
             public int  UncompressedSize;
 
             public SubChunkNode[] SubChunkNodes;
 
-            public new void Read(BinaryStream bs)
+            public override void Read(BinaryStream bs)
             {
                 base.Read(bs);
                 LodIdx           = bs.Read.UInt();
                 NumSubchunks     = (uint) (1 << 2 * bs.Read.Int());
-                UNK1             = bs.Read.UInt();
+                DataOffset       = bs.Read.UInt();
                 CompressedSize   = bs.Read.Int();
                 UncompressedSize = bs.Read.Int();
 
@@ -313,14 +317,15 @@ namespace FauFau.Formats
                 }
             }
 
-            public new void Write(BinaryStream bs)
+            public override void Write(BinaryStream bs)
             {
                 base.Write(bs);
                 bs.Write.UInt(LodIdx);
-                bs.Write.UInt((uint) (1 >> (2 * (int) NumSubchunks)));
-                bs.Write.UInt(UNK1);
-                bs.Write.Int(UncompressedSize);
+                // Stored as the exponent of 4
+                bs.Write.Int(BitOperations.Log2(NumSubchunks) / 2);
+                bs.Write.UInt(DataOffset);
                 bs.Write.Int(CompressedSize);
+                bs.Write.Int(UncompressedSize);
 
                 for (int i = 0; i < NumSubchunks; i++) {
                     SubChunkNodes[i].Write(bs);
@@ -330,97 +335,85 @@ namespace FauFau.Formats
 
         public class SubChunkNode : Node
         {
-            public uint    UNK1;
+            public uint    DataOffset;
             public int     CompressedSize;
             public int     UncompressedSize;
             public Vector3 BoundsMin;
             public Vector3 BoundsMax;
 
-            public new void Read(BinaryStream bs)
+            public override void Read(BinaryStream bs)
             {
                 base.Read(bs);
-                UNK1             = bs.Read.UInt();
+                DataOffset       = bs.Read.UInt();
                 CompressedSize   = bs.Read.Int();
                 UncompressedSize = bs.Read.Int();
 
-                BoundsMax = bs.Read.Vector3();
                 BoundsMin = bs.Read.Vector3();
+                BoundsMax = bs.Read.Vector3();
             }
 
-            public new void Write(BinaryStream bs)
+            public override void Write(BinaryStream bs)
             {
                 base.Write(bs);
-                bs.Write.UInt(UNK1);
+                bs.Write.UInt(DataOffset);
                 bs.Write.Int(CompressedSize);
                 bs.Write.Int(UncompressedSize);
 
-                bs.Write.Vector3(BoundsMax);
                 bs.Write.Vector3(BoundsMin);
+                bs.Write.Vector3(BoundsMax);
             }
         }
 
-        // A compressed block of memory
-        public class DataBlock : ReadWrite
+        // A compressed block, zlib after a DATA id or LZMA after a DAT2 id and the LZMA properties
+        public class Block : ReadWrite
         {
-            private const int    DATA_ID = 0x41544144;
-            public        int    Unk1;
-            public        byte[] CompressedData;
+            public const uint DATA_ID = 0x41544144;
+            public const uint DAT2_ID = 0x32544144;
 
+            public uint   Id;
+            public byte[] Properties;
+            public byte[] CompressedData;
+
+            // Both sizes count the id and the LZMA properties as well
             public int CompressedSize;
             public int UncompressedSize;
-            public int LodIdx;
 
-            public void Read(BinaryStream bs)
-            {
-                var id = bs.Read.UInt();
-                if (id != DATA_ID) throw new Exception("Didn't get a DATA id");
-                //Unk1           = bs.Read.Int();
-                //bs.Read.ByteArray(5 * 4);
-                CompressedData = bs.Read.ByteArray(CompressedSize);
-            }
+            public bool IsLzma => Id == DAT2_ID;
 
-            public void Write(BinaryStream bs)
-            {
-                bs.Write.UInt(DATA_ID);
-                //bs.Write.Int(Unk1);
-                bs.Write.ByteArray(CompressedData);
-            }
-        }
-
-        // LZMA compressed subchunk data
-        public class DatBlock : ReadWrite
-        {
-            private const int    DAT_ID = 0x32544144;
-            public        byte[] Properites;
-            public        byte[] CompressedData;
-
-            public int CompressedSize;
-            public int UncompressedSize;
-            public int LodIdx;
-            public int SubChunkIdx;
-
-            // Decompressed the data in this block
             public byte[] Decompress()
             {
-                var       decompressed = new byte[UncompressedSize];
-                using var lzmaStream   = LzmaStream.Create(Properites, new MemoryStream(CompressedData));
+                var decompressed = new byte[UncompressedSize];
+                if (UncompressedSize == 0)
+                    return decompressed;
 
-                lzmaStream.Read(decompressed, 0, decompressed.Length);
+                using Stream stream = IsLzma
+                    ? LzmaStream.Create(Properties, new MemoryStream(CompressedData))
+                    : new ZLibStream(new MemoryStream(CompressedData), CompressionMode.Decompress);
+                stream.ReadAtLeast(decompressed, decompressed.Length, false);
                 return decompressed;
             }
 
             public void Read(BinaryStream bs)
             {
-                var id = bs.Read.UInt();
-                if (id != DAT_ID) throw new Exception("Didn't get a DAT id");
-                Properites     = bs.Read.ByteArray(5);
-                CompressedData = bs.Read.ByteArray(CompressedSize);
+                Id = bs.Read.UInt();
+                if (Id == DAT2_ID) {
+                    Properties     = bs.Read.ByteArray(5);
+                    CompressedData = bs.Read.ByteArray(CompressedSize - 4 - 5);
+                }
+                else if (Id == DATA_ID) {
+                    CompressedData = bs.Read.ByteArray(CompressedSize - 4);
+                }
+                else {
+                    throw new InvalidDataException($"Unknown block id 0x{Id:X8}, expected DATA or DAT2");
+                }
             }
 
             public void Write(BinaryStream bs)
             {
-                bs.Write.UInt(DAT_ID);
-                //bs.Write.Int(Unk1);
+                bs.Write.UInt(Id);
+                if (IsLzma) {
+                    bs.Write.ByteArray(Properties);
+                }
                 bs.Write.ByteArray(CompressedData);
             }
         }

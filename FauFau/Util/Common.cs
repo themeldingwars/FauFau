@@ -89,7 +89,7 @@ namespace FauFau.Util
             if (sourceStart > 0) { ms.Position = sourceStart; }
             DeflateStream ds = new DeflateStream(ms, CompressionMode.Decompress, level);
 
-            ds.Read(destination, destinationStart, targetSize == -1 ? destination.Length : targetSize);
+            ds.ReadAtLeast(destination.AsSpan(destinationStart, targetSize == -1 ? destination.Length - destinationStart : targetSize), targetSize == -1 ? destination.Length - destinationStart : targetSize, false);
             ds.Dispose();
             ms.Dispose();
         }
@@ -104,7 +104,7 @@ namespace FauFau.Util
             using (DeflateStream ds = new DeflateStream(payload, CompressionMode.Decompress, level))
             {
                 byte[] tmp = new byte[targetSize];
-                ds.Read(tmp, 0, targetSize);
+                ds.ReadAtLeast(tmp, targetSize, false);
                 destination.Write.ByteArray(tmp);
             }
         }

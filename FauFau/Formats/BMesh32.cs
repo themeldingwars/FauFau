@@ -63,11 +63,7 @@ namespace FauFau.Formats
             BoneWeights = Read.TypeList<BoneWeight>(Read.Int());
             Hardpoints = Read.TypeList<Hardpoint>(Read.Int());
 
-            int referenceMeshFileNameLength = Read.Int();
-            if (referenceMeshFileNameLength > 0)
-            {
-                ReferenceMeshFileName = Read.String();
-            }
+            ReferenceMeshFileName = Read.String(Read.Int());
 
             ReferenceMeshFileTime = Read.ULong();
             ReferenceMeshType = (MeshType)Read.Byte();
@@ -75,10 +71,8 @@ namespace FauFau.Formats
             BaseVariantDiffs = Read.TypeList<BaseVariantDiff>(Read.Int());
             ConformWeights = Read.TypeList<ConformWeight>(Read.Int());
             MaterialSections = Read.TypeList<MaterialSection>(Read.Int());
-
-            Console.WriteLine(Hardpoints.Count);
-
         }
+
         public override void Write(BinaryStream bs)
         {
             BinaryWriter Write = bs.Write;
