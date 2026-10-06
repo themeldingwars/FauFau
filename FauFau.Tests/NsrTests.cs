@@ -15,7 +15,7 @@ namespace FauFau.Tests
     {
         private static readonly DateTime Recorded = new DateTime(2016, 11, 15, 18, 30, 0, DateTimeKind.Utc);
 
-        private static Nsr CreateSample(bool compressed)
+        internal static Nsr CreateSample(bool compressed)
         {
             Nsr nsr = Nsr.GenerateDummyFile(448);
             nsr.Compressed = compressed;
@@ -34,7 +34,7 @@ namespace FauFau.Tests
             return read;
         }
 
-        private static byte[] WriteBytes(Nsr nsr)
+        internal static byte[] WriteBytes(Nsr nsr)
         {
             nsr.Write(out byte[] bytes);
             return bytes;
@@ -47,7 +47,7 @@ namespace FauFau.Tests
             return nsr;
         }
 
-        private static byte[] Gzip(byte[] data)
+        internal static byte[] Gzip(byte[] data)
         {
             using MemoryStream compressed = new MemoryStream();
             using (GZipStream gzip = new GZipStream(compressed, CompressionLevel.Fastest, true))
@@ -55,7 +55,7 @@ namespace FauFau.Tests
             return compressed.ToArray();
         }
 
-        private static byte[] CreateVersion2()
+        internal static byte[] CreateVersion2()
         {
             Nsr nsr = CreateSample(false);
             nsr.Meta.Version = 3;
