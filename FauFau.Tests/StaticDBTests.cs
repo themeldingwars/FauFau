@@ -1,4 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Bitter;
 using FauFau.Formats;
 using FauFau.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -85,6 +90,118 @@ namespace FauFau.Tests
             table[0].Fields.ShouldBe(new object[] { 1U, "first", 1.5f });
             table[1].Fields.ShouldBe(new object[] { 2U, "second", null });
             table[2].Fields.ShouldBe(new object[] { 3U, "first", -4f });
+        }
+
+        [TestMethod]
+        public void Write_LeavesRowsUntouched()
+        {
+            StaticDB sdb = CreateSample();
+
+            sdb.Write(out byte[] first);
+            sdb.Write(out byte[] second);
+
+            sdb[0][0].Fields.ShouldBe(new object[] { 1U, "first", 1.5f });
+            second.ShouldBe(first);
+        }
+
+        [TestMethod]
+        public void Write_KeepsTimestamp()
+        {
+            StaticDB sdb = CreateSample();
+            sdb.Timestamp = new DateTime(2016, 11, 15, 18, 30, 0, DateTimeKind.Utc);
+
+            StaticDB read = RoundTrip(sdb);
+
+            read.Timestamp.ShouldBe(sdb.Timestamp);
+        }
+
+        [TestMethod]
+        public void WriteRead_WithoutObfuscation_KeepsRows()
+        {
+            StaticDB sdb = CreateSample();
+            sdb.Flags = 0;
+
+            StaticDB read = RoundTrip(sdb);
+
+            read.Flags.ShouldBe((HeaderFlags)0);
+            read.GetTableByName(TableName)[1].Fields.ShouldBe(new object[] { 2U, "second", null });
+        }
+
+        [TestMethod]
+        public void WriteRead_NullableTableEndingOn128Bytes_KeepsRows()
+        {
+            Column id = new Column { Id = Checksum.FFnv32("id"), Type = DBType.UInt };
+            Column value = new Column { Id = Checksum.FFnv32("value"), Type = DBType.Float };
+            Table table = new Table
+            {
+                Id = Checksum.FFnv32(TableName),
+                Columns = new List<Column> { id, value },
+                NullableColumn = new List<Column> { value },
+                Rows = new List<Row>(),
+            };
+            for (uint i = 0; i < 11; i++)
+                table.Rows.Add(new Row { Fields = { i, i % 2 == 0 ? null : (object)(float)i } });
+            StaticDB sdb = new StaticDB { Patch = "test-1962", Flags = HeaderFlags.ObfuscatedPool, Tables = new List<Table> { table } };
+
+            Table read = RoundTrip(sdb).GetTableByName(TableName);
+
+            read.Rows.Count.ShouldBe(11);
+            read[9].Fields.ShouldBe(new object[] { 9U, 9f });
+            read[10].Fields.ShouldBe(new object[] { 10U, null });
+        }
+
+        [TestMethod]
+        public void Read_SeveralInstancesInParallel_KeepTheirOwnData()
+        {
+            byte[][] files = new byte[8][];
+            for (int i = 0; i < files.Length; i++)
+            {
+                StaticDB sdb = CreateSample();
+                sdb[0][0][1] = "file " + i;
+                sdb.Write(out files[i]);
+            }
+            StaticDB[] read = new StaticDB[files.Length];
+
+            Parallel.For(0, files.Length, i =>
+            {
+                read[i] = new StaticDB();
+                read[i].Read(files[i]);
+            });
+
+            read.Select(sdb => sdb[0][0][1]).ShouldBe(Enumerable.Range(0, files.Length).Select(i => (object)("file " + i)));
+        }
+
+        [TestMethod]
+        public void Read_LeavesCallerStreamOpen()
+        {
+            CreateSample().Write(out byte[] bytes);
+            BinaryStream stream = new BinaryStream(new MemoryStream(bytes));
+
+            new StaticDB().Read(stream);
+            stream.ByteOffset = 0;
+            uint magic = stream.Read.UInt();
+
+            magic.ShouldBe(0xDA7ABA5EU);
+        }
+
+        [TestMethod]
+        public void GetTableByName_Missing_ThrowsKeyNotFound()
+        {
+            StaticDB sdb = CreateSample();
+
+            Action act = () => sdb.GetTableByName("dbtest::Missing");
+
+            act.ShouldThrow<KeyNotFoundException>();
+        }
+
+        [TestMethod]
+        public void GetColumnByName_Missing_ThrowsKeyNotFound()
+        {
+            StaticDB sdb = CreateSample();
+
+            Action act = () => sdb[0].GetColumnByName("missing");
+
+            act.ShouldThrow<KeyNotFoundException>();
         }
 
         [TestMethod]

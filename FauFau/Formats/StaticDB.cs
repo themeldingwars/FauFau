@@ -25,9 +25,8 @@ namespace FauFau.Formats
         private uint memoryVersion = 1002;
         private int numThreads = Environment.ProcessorCount;
 
-        private static Dictionary<string, uint> stringHashLookup = new ();
-        private static Dictionary<ulong, byte[]> uniqueEntries1000 = new ();
-        private static Dictionary<uint, byte[]> uniqueEntries1002 = new ();
+        private Dictionary<(ulong, int), byte[]> uniqueEntries1000 = new ();
+        private Dictionary<uint, byte[]> uniqueEntries1002 = new ();
 
         // One MersenneTwister per thread & reseed per entry
         private static readonly ThreadLocal<MersenneTwister> threadMt = new (() => new MersenneTwister());
@@ -49,10 +48,6 @@ namespace FauFau.Formats
             if (Flags.HasFlag(HeaderFlags.ObfuscatedPool)) {
                 MTXor(Checksum.FFnv32(headerInfo.patchName), ref data);
             }
-
-            // Cleanup memory, the original stream is not needed anymore
-            bs.Dispose();
-            bs = null;
 
             // Decompress
             BinaryStream ibs;
@@ -245,7 +240,7 @@ namespace FauFau.Formats
 
             // Parse the pool data and fill in the tables
             if (memoryVersion == 1000) {
-                uniqueEntries1000 = new Dictionary<ulong, byte[]>();
+                uniqueEntries1000 = new Dictionary<(ulong, int), byte[]>();
                 ParsePoolVersion1000(dataBlock);
             } else {
                 uniqueEntries1002 = new Dictionary<uint, byte[]>();
@@ -298,7 +293,7 @@ namespace FauFau.Formats
 
                     lock (uniqueEntries1000)
                     {
-                        uniqueEntries1000.Add(pair.Item1, d);
+                        uniqueEntries1000.Add(pair, d);
                     }
                 }
                 dbs.Dispose();
@@ -318,9 +313,8 @@ namespace FauFau.Formats
                             object obj = null;
                             if (k != null)
                             {
-                                if (uniqueEntries1000.ContainsKey((ulong)k))
+                                if (uniqueEntries1000.TryGetValue(((ulong)k, y), out byte[] d))
                                 {
-                                    byte[] d = uniqueEntries1000[(ulong)k];
                                     if (d != null)
                                     {
                                         obj = BytesToDBType(type, d);
@@ -394,9 +388,8 @@ namespace FauFau.Formats
                             object obj = null;
                             if (k != null)
                             {
-                                if (uniqueEntries1002.ContainsKey((uint)k))
+                                if (uniqueEntries1002.TryGetValue((uint)k, out byte[] d))
                                 {
-                                    byte[] d = uniqueEntries1002[(uint)k];
                                     if (d != null)
                                     {
                                         obj = BytesToDBType(type, d);
@@ -413,6 +406,9 @@ namespace FauFau.Formats
 
         public override void Write(BinaryStream bs)
         {
+            if (fileVersion == 7 || memoryVersion != 1002)
+                throw new NotSupportedException($"Writing file version {fileVersion} with memory version {memoryVersion} is not supported, only memory version 1002");
+
             // Doing this for debugging purposes
             MemoryStream memory_header     = new MemoryStream();
             MemoryStream memory_info       = new MemoryStream();
@@ -430,7 +426,6 @@ namespace FauFau.Formats
             BinaryStream obfuscated_bs     = new BinaryStream(memory_obfuscated);
 
             // === Regenerate info structures ==
-            Console.WriteLine("=== Regenerate info structures ===");
             int numberOfTables = Tables.Count;
             TableInfo[] tableInfos = new TableInfo[numberOfTables];
             FieldInfo[][] fieldInfos = new FieldInfo[numberOfTables][];
@@ -485,13 +480,8 @@ namespace FauFau.Formats
             }
 
             // === Data ===
-            Console.WriteLine("=== Data ===");
-            int GetHashCode(byte[] val)
-            {
-                var str = Convert.ToBase64String(val);
-                return str.GetHashCode();
-            }
-            Dictionary<int, uint> uniqueDataObjectKeys = new Dictionary<int, uint>();
+            Dictionary<byte[], uint> uniqueDataObjectKeys = new Dictionary<byte[], uint>(new ByteArrayComparer());
+            Dictionary<(int, int, int), uint> dataKeys = new Dictionary<(int, int, int), uint>();
 
             for (int tn = 0; tn < Tables.Count; tn++)
             {
@@ -508,23 +498,18 @@ namespace FauFau.Formats
                             {
                                 byte[] dat = DBTypeToBytes(field.Type, obj);
                                 if (dat != null && dat.Length != 0) {
-                                    int hash = GetHashCode(dat);
-
-                                    if (!uniqueDataObjectKeys.ContainsKey(hash)) {
-                                        uint key = GenerateDataEntryKey((uint)data_bs.ByteOffset, (uint)dat.Length);
+                                    if (!uniqueDataObjectKeys.TryGetValue(dat, out uint key)) {
+                                        key = GenerateDataEntryKey((uint)data_bs.ByteOffset, (uint)dat.Length);
                                         if ((key & 1) > 0) {
                                             data_bs.Write.UShort((ushort)dat.Length);
                                         }
-                                        byte[] twisted = TwistDataEntry(key, dat);
+                                        byte[] twisted = TwistDataEntry(key, (byte[])dat.Clone());
                                         data_bs.Write.ByteArray(twisted);
 
-                                        uniqueDataObjectKeys.Add(hash, key);
+                                        uniqueDataObjectKeys.Add(dat, key);
                                     }
 
-                                    row[fn] = uniqueDataObjectKeys[hash];
-                                }
-                                else {
-                                    row[fn] = null; // I seem to have no fucking choice
+                                    dataKeys[(tn, rn, fn)] = key;
                                 }
                             }
                         }
@@ -532,13 +517,9 @@ namespace FauFau.Formats
                 }
             }
 
-            Console.WriteLine($"Generated uniqueDataObjects count: {uniqueDataObjectKeys.Count}");
-            Console.WriteLine($"Original uniqueEntries count: {uniqueEntries1002.Count}");
-            Console.WriteLine($"Generated length (data): {data_bs.ByteOffset}");
 
             // === Rows ===
             // Since it contains data references, this should go after data
-            Console.WriteLine("=== Rows ===");
 
             // Working code
             for (ushort i = 0; i < Tables.Count; i++)
@@ -569,7 +550,7 @@ namespace FauFau.Formats
                         }
 
                         // Write db type and packed / cryped field data
-                        WriteDBType(rows_bs, (DBType)fieldInfo[z].type, Tables[i].Rows[y].Fields[z]);
+                        WriteDBType(rows_bs, (DBType)fieldInfo[z].type, GetWriteValue(dataKeys, i, y, z));
                     }
 
                     // Nullable Fields
@@ -578,7 +559,7 @@ namespace FauFau.Formats
                         byte[] bitArr = new byte[tableInfo.nullableBitfields*8];
                         for (int n = 0; n < Tables[i].NullableColumn.Count; n++) {
                             int index = Tables[i].Columns.IndexOf(Tables[i].NullableColumn[n]);
-                            if (Tables[i].Rows[y].Fields[index] == null) {
+                            if (GetWriteValue(dataKeys, i, y, index) == null) {
                                 bitArr[n] = 1;
                             }
                         }
@@ -587,12 +568,8 @@ namespace FauFau.Formats
                 }
 
                 if (rowInfo.rowCount > 0) {
-                    // Calc table length and add offset for alignment
-                    uint tableLen = (rowInfo.rowCount * tableInfo.numBytes);
-                    if (tableInfo.numUsedBytes < tableInfo.numBytes) {
-                        // account for last row being shorter
-                        tableLen -= (uint)(tableInfo.numBytes - tableInfo.numUsedBytes);
-                    }
+                    // Calc table length and add offset for alignment, the last row is shorter
+                    uint tableLen = (uint)rows_bs.ByteOffset - rowInfo.rowOffset;
                     int mustBeDivisableBy128 = 128;
                     uint desiredLen = (uint) FindClosestLargerNumber((int)tableLen, mustBeDivisableBy128);
                     uint requiredPadding = desiredLen - tableLen;
@@ -602,11 +579,9 @@ namespace FauFau.Formats
                     }
                 }
             }
-            Console.WriteLine($"Generated length (rows): {rows_bs.ByteOffset}");
 
             // === Info ===
             // Since it contains row offsets, this should go after row generation
-            Console.WriteLine("=== Info ===");
 
             // Write table header
             info_bs.Write.UInt(this.memoryVersion);
@@ -631,7 +606,6 @@ namespace FauFau.Formats
             uint tableAndFieldInfoLength = (uint) info_bs.ByteOffset;
             uint rowInfoSectionLength = (uint) (Tables.Count * 8) + 37; // Size of RowInfo + last stuff
             uint rowsSectionOffset = tableAndFieldInfoLength + rowInfoSectionLength;
-            Console.WriteLine($"Row Section Base Offset is {rowsSectionOffset}");
             for (ushort i = 0; i < Tables.Count; i++)
             {
                 rowInfos[i].rowOffset += rowsSectionOffset;
@@ -644,60 +618,46 @@ namespace FauFau.Formats
             int dataSectionOffset = (int) (memory_info.Length + memory_rows.Length) + 37;
             info_bs.Write.Int(dataSectionOffset);
             info_bs.Write.ByteArray(new byte[33]); // padding?
-            Console.WriteLine($"Generated length (info): {info_bs.ByteOffset}");
 
             // === Inflated ===
             // Put together the data that should be compressed
-            Console.WriteLine("=== Inflate ===");
-            Console.WriteLine($"Generated info section begins at: {inflated_bs.ByteOffset}");
             inflated_bs.Write.ByteArray(memory_info.ToArray());
-            Console.WriteLine($"Generated rows section begins at: {inflated_bs.ByteOffset}");
             inflated_bs.Write.ByteArray(memory_rows.ToArray());
-            Console.WriteLine($"Generated data section begins at: {inflated_bs.ByteOffset}");
             inflated_bs.Write.ByteArray(memory_data.ToArray());
-            Console.WriteLine($"Generated length (inflated): {inflated_bs.ByteOffset}");
 
             // === Deflated ===
             // Deflate inflated
-            Console.WriteLine("=== Deflate ===");
             uint uncompressedSize = (uint) memory_inflated.Length;
-            Console.WriteLine($"Writing generated uncompressed size: {uncompressedSize}");
             deflated_bs.Write.UInt(uncompressedSize);
             deflated_bs.Write.UInt(0); // size = long?
             deflated_bs.Write.ByteArray(new byte[] {0x78, 0x01}); // deflate header
             inflated_bs.ByteOffset = 0;
             Deflate(inflated_bs, deflated_bs, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed);
             uint payloadSize = (uint) deflated_bs.ByteOffset;
-            Console.WriteLine($"Generated length (deflated): {deflated_bs.ByteOffset}");
 
             // === Header Info Prep ===
-            Console.WriteLine("=== Prep Header Info ===");
             HeaderInfo headerInfo = new HeaderInfo();
             headerInfo.magic = 0xDA7ABA5E;
             headerInfo.patchName = this.Patch;
-            headerInfo.timestamp = 1462422114000000;
+            headerInfo.timestamp = (ulong)Util.Time.UnixTimestampMicrosecondsFromDatetime(Timestamp);
             headerInfo.flags = this.Flags;
             headerInfo.version = this.fileVersion;
             headerInfo.payloadSize = 0; // Will be set later
 
 
             // === Obfuscate ===
-            Console.WriteLine("=== Obfuscate ===");
             byte[] obfuscatedData = memory_deflated.ToArray();
-            MTXor(Checksum.FFnv32(headerInfo.patchName), ref obfuscatedData);
+            if (Flags.HasFlag(HeaderFlags.ObfuscatedPool)) {
+                MTXor(Checksum.FFnv32(headerInfo.patchName), ref obfuscatedData);
+            }
             obfuscated_bs.Write.ByteArray(obfuscatedData);
 
             // === Header ===
             // Should be made at the end, since it needs to hold the payload size
-            Console.WriteLine("=== Header ===");
             headerInfo.payloadSize = (uint) memory_obfuscated.Length; // Remember!
-            Console.WriteLine($"Writing generated payload size: {headerInfo.payloadSize}");
             header_bs.Write.Type<HeaderInfo>(headerInfo);
-            Console.WriteLine($"Generated length (header): {header_bs.ByteOffset}");
 
             // === Finally, Write ===
-            Console.WriteLine("=== Finalize ===");
-            Console.WriteLine("All preparation steps completed, writing final");
             bs.Write.ByteArray(memory_header.ToArray());
             bs.Write.ByteArray(memory_obfuscated.ToArray());
 
@@ -868,24 +828,22 @@ namespace FauFau.Formats
                     bs.Write.UInt((uint)obj);
                     break;
                 default:
-                    Console.WriteLine($"WriteDBType unhandled {type}");
-                    break;
+                    throw new NotSupportedException($"Can't write a value of type {type}");
             }
 
         }
         public byte[] GetDataEntry(uint key)
         {
-            foreach (uint k in uniqueEntries1002.Keys)
-            {
-                Console.WriteLine(k);
-                break;
-            }
+            return uniqueEntries1002.GetValueOrDefault(key);
+        }
 
-            if (uniqueEntries1002.ContainsKey(key))
-            {
-                return uniqueEntries1002[key];
-            }
-            return null;
+        private object GetWriteValue(Dictionary<(int, int, int), uint> dataKeys, int table, int row, int column)
+        {
+            if (!IsDataType(Tables[table].Columns[column].Type))
+                return Tables[table].Rows[row].Fields[column];
+
+            // Empty data is written as null, there's no pool entry for it
+            return dataKeys.TryGetValue((table, row, column), out uint key) ? key : null;
         }
 
 
@@ -1181,21 +1139,6 @@ namespace FauFau.Formats
 
         #region Indexers
 
-        private static uint GetHash(string str)
-        {
-            uint hash;
-            if (stringHashLookup.ContainsKey(str))
-            {
-                hash = stringHashLookup[str];
-            }
-            else
-            {
-                hash = Checksum.FFnv32(str);
-                stringHashLookup.Add(str, hash);
-            }
-            return hash;
-        }
-
         public Table this[int index]
         {
             get
@@ -1209,7 +1152,7 @@ namespace FauFau.Formats
         }
         public int GetIndexByName(string name)
         {
-            return GetIndexById(GetHash(name));
+            return GetIndexById(Checksum.FFnv32(name));
         }
         public int GetIndexById(uint id)
         {
@@ -1224,11 +1167,13 @@ namespace FauFau.Formats
         }
         public Table GetTableByName(string name)
         {
-            return Tables[GetIndexByName(name)];
+            int index = GetIndexByName(name);
+            return index >= 0 ? Tables[index] : throw new KeyNotFoundException($"No table named {name}");
         }
         public Table GetTableById(uint id)
         {
-            return Tables[GetIndexById(id)];
+            int index = GetIndexById(id);
+            return index >= 0 ? Tables[index] : throw new KeyNotFoundException($"No table with id {id}");
         }
 
         public IEnumerator<Table> GetEnumerator()
@@ -1386,7 +1331,7 @@ namespace FauFau.Formats
 
             public int GetColumnIndexByName(string name)
             {
-                return GetColumnIndexById(GetHash(name));
+                return GetColumnIndexById(Checksum.FFnv32(name));
             }
             public int GetColumnIndexById(uint id)
             {
@@ -1401,11 +1346,13 @@ namespace FauFau.Formats
             }
             public Column GetColumnByName(string name)
             {
-                return Columns[GetColumnIndexByName(name)];
+                int index = GetColumnIndexByName(name);
+                return index >= 0 ? Columns[index] : throw new KeyNotFoundException($"No column named {name}");
             }
             public Column GetColumnByName(uint id)
             {
-                return Columns[GetColumnIndexById(id)];
+                int index = GetColumnIndexById(id);
+                return index >= 0 ? Columns[index] : throw new KeyNotFoundException($"No column with id {id}");
             }
             public bool IsColumnNullable(Column column)
             {
@@ -1474,6 +1421,18 @@ namespace FauFau.Formats
         }
         #endregion
 
+
+        private class ByteArrayComparer : IEqualityComparer<byte[]>
+        {
+            public bool Equals(byte[] x, byte[] y) => x.AsSpan().SequenceEqual(y);
+
+            public int GetHashCode(byte[] obj)
+            {
+                HashCode hash = new HashCode();
+                hash.AddBytes(obj);
+                return hash.ToHashCode();
+            }
+        }
 
         #region Sdb file structs
         [Flags]
