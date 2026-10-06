@@ -74,7 +74,7 @@ namespace FauFau.Net.Web
 
         public static ReadOnlySpan<char> GenerateSecret(ReadOnlySpan<char> email, ReadOnlySpan<char> password)
         {
-            return Auth.GenerateSecret(email, password, false);
+            return Auth.GenerateSecret(email, password);
         }
 
         public static ReadOnlySpan<char> CreateRequestString(ReadOnlySpan<char> uid,  ReadOnlySpan<char> host,

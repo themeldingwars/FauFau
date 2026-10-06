@@ -67,9 +67,9 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
-        public void GenerateSecret_MatchesAuthV1()
+        public void GenerateSecret_MatchesClientSecret()
         {
-            string expected = Auth.GenerateSecret("test@mail.com", "password", false).ToString();
+            const string expected = "36e3788836c2c0c2335d6e7b96220fe1fac1a898";
 
             string secret = Red5Sig.GenerateSecret("test@mail.com", "password").ToString();
 
