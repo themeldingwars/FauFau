@@ -1,3 +1,4 @@
+using System;
 using FauFau.Net.Web;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shouldly;
@@ -84,6 +85,32 @@ namespace FauFau.Tests
             string secret = Red5Sig.GenerateSecret("test@mail.com", "password").ToString();
 
             secret.ShouldBe(expected);
+        }
+
+        [TestMethod]
+        public void CreateRequestString_MatchesClientRequest()
+        {
+            const string uid = "Qth4CwFkTyixv3NPM6V8RL4BByY=";
+            const string host = "oracleweb-testserver.nyaasync.net";
+            const string path = "/clientapi/api/v1/login_alerts";
+            const string hbody = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+
+            string request = Red5Sig.CreateRequestString(uid, host, path, hbody, 0, 1610833076, "3e691feb538a38a2").ToString();
+
+            request.ShouldBe(Request);
+        }
+
+        [TestMethod]
+        public void CreateRequestString_Now_UsesSecondsAndLongNonce()
+        {
+            uint before = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            string request = Red5Sig.CreateRequestString("uid", "host", "/path", "hbody", 9197696484326682622).ToString();
+            Red5Sig.QsValues sig = Red5Sig.ParseString("Red5 " + Token + " " + request);
+
+            sig.Time.ShouldBeInRange(before, before + 5);
+            sig.Nonce.Length.ShouldBe(16);
+            sig.Cid.ShouldBe(9197696484326682622UL);
         }
 
         [TestMethod]

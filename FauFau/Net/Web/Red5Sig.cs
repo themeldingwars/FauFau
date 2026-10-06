@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Security.Cryptography;
 using System.Web;
 using FauFau.Util;
 
@@ -81,11 +82,20 @@ namespace FauFau.Net.Web
                                                              ReadOnlySpan<char> path, ReadOnlySpan<char> hbody,
                                                              ulong              cid = 0)
         {
-            var cidStr = Convert.ToString(cid);
-            var tc     = DateTimeOffset.UtcNow.ToUnixTimeSeconds() * 1000;
-            var nonce  = Common.BytesToHexString(BitConverter.GetBytes(Environment.TickCount), true);
+            var time  = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var nonce = Common.BytesToHexString(RandomNumberGenerator.GetBytes(8), false);
+
+            return CreateRequestString(uid, host, path, hbody, cid, time, nonce);
+        }
+
+        // uid, host and path use uppercase RFC 3986 escapes, the time is in seconds
+        public static ReadOnlySpan<char> CreateRequestString(ReadOnlySpan<char> uid,  ReadOnlySpan<char> host,
+                                                             ReadOnlySpan<char> path, ReadOnlySpan<char> hbody,
+                                                             ulong              cid,  uint               time,
+                                                             ReadOnlySpan<char> nonce)
+        {
             var requestStr =
-                $"ver={VERSION.ToString()}&tc={tc.ToString()}&nonce={nonce.ToString()}&uid={uid.ToString()}&host={host.ToString()}&path={path.ToString()}&hbody={hbody.ToString()}&cid={cidStr}";
+                $"ver={VERSION}&tc={time}&nonce={nonce}&uid={Uri.EscapeDataString(uid.ToString())}&host={Uri.EscapeDataString(host.ToString())}&path={Uri.EscapeDataString(path.ToString())}&hbody={hbody}&cid={cid}";
 
             return requestStr.AsSpan();
         }
