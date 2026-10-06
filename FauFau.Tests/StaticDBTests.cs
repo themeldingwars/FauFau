@@ -55,7 +55,7 @@ namespace FauFau.Tests
             return read;
         }
 
-        private static byte[] InflatePayload(byte[] file)
+        internal static byte[] InflatePayload(byte[] file)
         {
             const int payloadStart = 128 + 4 + 4 + 2;
             using MemoryStream compressed = new MemoryStream(file, payloadStart, file.Length - payloadStart);
@@ -65,7 +65,7 @@ namespace FauFau.Tests
             return inflated.ToArray();
         }
 
-        private static byte[] BuildFile(byte[] original, byte[] payload)
+        internal static byte[] BuildFile(byte[] original, byte[] payload)
         {
             MemoryStream deflated = new MemoryStream();
             using (DeflateStream deflate = new DeflateStream(deflated, CompressionLevel.Fastest, true))
