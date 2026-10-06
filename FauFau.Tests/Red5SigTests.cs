@@ -27,7 +27,17 @@ namespace FauFau.Tests
             sig.Host.ToString().ShouldBe("oracleweb-testserver.nyaasync.net");
             sig.Path.ToString().ShouldBe("/clientapi/api/v1/login_alerts");
             sig.Body.ToString().ShouldBe("da39a3ee5e6b4b0d3255bfef95601890afd80709");
-            sig.Cid.ShouldBe(7U);
+            sig.Cid.ShouldBe(7UL);
+        }
+
+        [TestMethod]
+        public void ParseString_CharacterGuid_ReadsFullCid()
+        {
+            string header = "Red5 " + Token + " " + Request.Replace("cid=0", "cid=18446744073709551615");
+
+            Red5Sig.QsValues sig = Red5Sig.ParseString(header);
+
+            sig.Cid.ShouldBe(ulong.MaxValue);
         }
 
         [TestMethod]
