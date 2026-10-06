@@ -54,11 +54,13 @@ namespace FauFau.Formats
             if (fileVersion == 7) // 1297 - No pre-payload data, unknown inflated size
             {
                 // ushort 0x78 0x01 zlib deflate low/no compression
-                var payloadStream = new BinaryStream(new MemoryStream(data[2..]));
                 var inflatedStream = new MemoryStream();
-                ibs = new BinaryStream(inflatedStream);
-                InflateUnknownTargetSize(payloadStream, ibs, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed);
+                using (var deflate = new System.IO.Compression.DeflateStream(new MemoryStream(data, 2, data.Length - 2), System.IO.Compression.CompressionMode.Decompress))
+                {
+                    deflate.CopyTo(inflatedStream);
+                }
                 inflated = inflatedStream.ToArray();
+                ibs = new BinaryStream(new MemoryStream(inflated));
             }
             else
             {
@@ -68,7 +70,10 @@ namespace FauFau.Formats
                 // ushort 0x78 0x01 zlib deflate low/no compression
                 uint inflatedSize = UIntFromBufferLE(data);
                 inflated = new byte[inflatedSize];
-                Inflate(data, ref inflated, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, (int)inflatedSize, 10);
+                using (var deflate = new System.IO.Compression.DeflateStream(new MemoryStream(data, 10, data.Length - 10), System.IO.Compression.CompressionMode.Decompress))
+                {
+                    deflate.ReadAtLeast(inflated, inflated.Length, false);
+                }
                 ibs = new BinaryStream(new MemoryStream(inflated));
             }
 
