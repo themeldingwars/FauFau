@@ -59,6 +59,8 @@ jobs:
         run: dotnet restore
       - name: Build
         run: dotnet build --no-restore -c Release
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
 
       - name: Create NuGet package
         run: dotnet pack --no-build -c Release FauFau/FauFau.csproj --output "$NUGET_DIRECTORY"
