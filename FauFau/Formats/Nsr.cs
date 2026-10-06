@@ -52,14 +52,16 @@ namespace FauFau.Formats
 
             using (BinaryStream payload = new BinaryStream(new MemoryStream(data)))
             {
-                ReadPayload(payload);
+                ReadPayload(payload, data);
             }
         }
 
         private static byte[] Gunzip(byte[] data, out bool cutOff)
         {
             cutOff = false;
-            using MemoryStream inflated = new MemoryStream();
+            // The trailer has the unpacked size, unless the file is cut off
+            uint expectedSize = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(data.Length - 4));
+            using MemoryStream inflated = new MemoryStream(expectedSize < 512 * 1024 * 1024 ? (int)expectedSize : 0);
             using (GZipStream gzip = new GZipStream(new MemoryStream(data), CompressionMode.Decompress))
             {
                 // Small reads, since GZipStream throws at the cut and the data of that read is lost
@@ -79,12 +81,11 @@ namespace FauFau.Formats
             }
 
             // A cut off stream doesn't always throw, so check the size in the trailer as well
-            uint expectedSize = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(data.Length - 4));
             cutOff |= expectedSize != (uint)inflated.Length;
             return inflated.ToArray();
         }
 
-        private void ReadPayload(BinaryStream bs)
+        private void ReadPayload(BinaryStream bs, byte[] data)
         {
             Description = bs.Read.Type<DescriptionSection>();
             Index = new IndexSection();
@@ -121,27 +122,35 @@ namespace FauFau.Formats
                 }
             }
 
-            ReadPackets(bs);
+            ReadPackets(data, (int)bs.ByteOffset);
         }
 
-        private void ReadPackets(BinaryStream bs)
+        private void ReadPackets(byte[] data, int position)
         {
-            Packets = new List<Packet>();
-            while (bs.Length - bs.ByteOffset >= Packet.HeaderLength)
+            // Roughly the average packet size of 1962 replays
+            Packets = new List<Packet>((data.Length - position) / 24);
+            while (data.Length - position >= Packet.HeaderLength)
             {
-                Packet packet = new Packet();
-                packet.ReadHeader(bs);
-                if (bs.Length - bs.ByteOffset < packet.Length)
+                ReadOnlySpan<byte> header = data.AsSpan(position, Packet.HeaderLength);
+                Packet packet = new Packet
+                {
+                    TimeStamp = BinaryPrimitives.ReadUInt32LittleEndian(header),
+                    Length = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(4)),
+                    MessageId = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(6)),
+                };
+                position += Packet.HeaderLength;
+                if (data.Length - position < packet.Length)
                 {
                     Truncated = true;
                     return;
                 }
 
-                packet.Data = bs.Read.ByteArray(packet.Length);
+                packet.Data = data.AsSpan(position, packet.Length).ToArray();
+                position += packet.Length;
                 Packets.Add(packet);
             }
 
-            if (bs.ByteOffset != bs.Length)
+            if (position != data.Length)
             {
                 Truncated = true;
             }
