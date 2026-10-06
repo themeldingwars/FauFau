@@ -210,6 +210,8 @@ namespace FauFau.Formats
                         // null out nulls again :P
                         if (tableInfo.nullableBitfields > 0)
                         {
+                            // The null bits follow the used bytes, which can end after the last field
+                            dbs.ByteOffset = rowInfo.rowOffset + (tableInfo.numBytes * y) + tableInfo.numUsedBytes;
                             byte[] nulls = dbs.Read.BitArray(tableInfo.nullableBitfields * 8);
                             for (int n = 0; n < Tables[i].NullableColumn.Count; n++)
                             {
@@ -563,6 +565,7 @@ namespace FauFau.Formats
                                 bitArr[n] = 1;
                             }
                         }
+                        rows_bs.ByteOffset = rowInfo.rowOffset + (tableInfo.numBytes * y) + tableInfo.numUsedBytes;
                         rows_bs.Write.BitArray(bitArr);
                     }
                 }

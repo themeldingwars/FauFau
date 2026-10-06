@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -62,6 +63,37 @@ namespace FauFau.Tests
             using MemoryStream inflated = new MemoryStream();
             deflate.CopyTo(inflated);
             return inflated.ToArray();
+        }
+
+        private static byte[] BuildFile(byte[] original, byte[] payload)
+        {
+            MemoryStream deflated = new MemoryStream();
+            using (DeflateStream deflate = new DeflateStream(deflated, CompressionLevel.Fastest, true))
+                deflate.Write(payload);
+
+            byte[] file = new byte[128 + 4 + 4 + 2 + deflated.Length];
+            original.AsSpan(0, 128).CopyTo(file);
+            BinaryPrimitives.WriteUInt32LittleEndian(file.AsSpan(8), (uint)(file.Length - 128));
+            BinaryPrimitives.WriteUInt32LittleEndian(file.AsSpan(128), (uint)payload.Length);
+            file[136] = 0x78;
+            file[137] = 0x01;
+            deflated.ToArray().CopyTo(file, 138);
+            return file;
+        }
+
+        private static StaticDB CreateNullableSample(params Row[] rows)
+        {
+            Column id = new Column { Id = Checksum.FFnv32("id"), Type = DBType.UInt };
+            Column first = new Column { Id = Checksum.FFnv32("first"), Type = DBType.Float };
+            Column second = new Column { Id = Checksum.FFnv32("second"), Type = DBType.Float };
+            Table table = new Table
+            {
+                Id = Checksum.FFnv32(TableName),
+                Columns = new List<Column> { id, first, second },
+                NullableColumn = new List<Column> { first, second },
+                Rows = rows.ToList(),
+            };
+            return new StaticDB { Patch = "test-1962", Flags = HeaderFlags.Compressed, Tables = new List<Table> { table } };
         }
 
         [TestMethod]
@@ -164,6 +196,45 @@ namespace FauFau.Tests
             Table table = RoundTrip(sdb).GetTableByName(TableName);
 
             table[1].Fields.ShouldBe(new object[] { 2U, "second", null });
+        }
+
+        [TestMethod]
+        public void Write_NullBits_FollowUsedBytesLsbFirst()
+        {
+            StaticDB sdb = CreateNullableSample(new Row { Fields = { 1U, 2f, null } });
+            const int rowOffsetPosition = 6 + 11 + 3 * 8;
+            const int numUsedBytes = 12;
+
+            sdb.Write(out byte[] bytes);
+            byte[] payload = InflatePayload(bytes);
+            int rowOffset = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(rowOffsetPosition));
+
+            payload[rowOffset + numUsedBytes].ShouldBe((byte)0x02);
+        }
+
+        [TestMethod]
+        public void Read_UsedBytesEndAfterLastField_ReadsNullBitsAfterUsedBytes()
+        {
+            StaticDB sdb = CreateNullableSample(new Row { Fields = { 1U, null, 3f } }, new Row { Fields = { 2U, 4f, null } });
+            sdb.Write(out byte[] bytes);
+            byte[] payload = InflatePayload(bytes);
+            const int numUsedBytesPosition = 6 + 8;
+            const int rowOffsetPosition = 6 + 11 + 3 * 8;
+            const int numBytes = 16;
+            int rowOffset = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(rowOffsetPosition));
+            BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(numUsedBytesPosition), 14);
+            for (int row = 0; row < 2; row++)
+            {
+                int rowStart = rowOffset + numBytes * row;
+                payload[rowStart + 14] = payload[rowStart + 12];
+                payload[rowStart + 12] = 0;
+            }
+            StaticDB read = new StaticDB();
+
+            read.Read(BuildFile(bytes, payload));
+
+            read[0][0].Fields.ShouldBe(new object[] { 1U, null, 3f });
+            read[0][1].Fields.ShouldBe(new object[] { 2U, 4f, null });
         }
 
         [TestMethod]
