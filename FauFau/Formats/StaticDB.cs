@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -172,58 +173,55 @@ namespace FauFau.Formats
             uint poolOffset = 0;
             poolOffset = ibs.Read.UInt();
 
-            // Read rows
-            ConcurrentQueue<int> tableRowsReadQueue = new ConcurrentQueue<int>();
-            for (ushort i = 0; i < indexLength; i++)
+            // Read rows in blocks, so the big tables are spread over all threads too
+            Row[][] tableRows = new Row[indexLength][];
+            int[][] nullableIndices = new int[indexLength][];
+            for (int i = 0; i < indexLength; i++)
             {
-                tableRowsReadQueue.Enqueue(i);
+                Table table = Tables[i];
+                tableRows[i] = new Row[rowInfos[i].rowCount];
+                nullableIndices[i] = new int[table.NullableColumn.Count];
+                for (int n = 0; n < nullableIndices[i].Length; n++)
+                {
+                    nullableIndices[i][n] = table.Columns.IndexOf(table.NullableColumn[n]);
+                }
             }
 
-            Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, q => {
+            Parallel.ForEach(GetRowBlocks(tableRows), () => new BinaryStream(new MemoryStream(inflated)), (block, _, fallback) =>
+            {
+                TableInfo tableInfo = tableInfos[block.Table];
+                FieldInfo[] fieldInfo = fieldInfos[block.Table];
+                RowInfo rowInfo = rowInfos[block.Table];
+                int[] nullable = nullableIndices[block.Table];
 
-                BinaryStream dbs = new BinaryStream(new MemoryStream(inflated));
-
-                while (tableRowsReadQueue.TryDequeue(out int i))
+                for (int y = block.Start; y < block.End; y++)
                 {
-                    TableInfo tableInfo = tableInfos[i];
-                    FieldInfo[] fieldInfo = fieldInfos[i];
-                    RowInfo rowInfo = rowInfos[i];
-
-                    Tables[i].Rows = new List<Row>((int)rowInfo.rowCount);
-
-                    for (int y = 0; y < rowInfo.rowCount; y++)
+                    int rowStart = (int)(rowInfo.rowOffset + tableInfo.numBytes * y);
+                    Row row = new Row(tableInfo.numFields);
+                    for (int z = 0; z < tableInfo.numFields; z++)
                     {
-                        Row row = new Row(tableInfo.numFields);
-                        dbs.ByteOffset = rowInfo.rowOffset + (tableInfo.numBytes * y) + fieldInfo[0].start;
-                        for (int z = 0; z < tableInfo.numFields; z++)
-                        {
-                            if (Tables[i].Columns[z].Padding != 0)
-                            {
-                                dbs.ByteOffset += Tables[i].Columns[z].Padding;
-                            }
-                            // just read the basic type now, unpack & decrypt later to reduce seeking
-                            row.Fields.Add(ReadDBType(dbs, (DBType)fieldInfo[z].type));
-                        }
-
-                        // null out nulls again :P
-                        if (tableInfo.nullableBitfields > 0)
-                        {
-                            // The null bits follow the used bytes, which can end after the last field
-                            dbs.ByteOffset = rowInfo.rowOffset + (tableInfo.numBytes * y) + tableInfo.numUsedBytes;
-                            byte[] nulls = dbs.Read.BitArray(tableInfo.nullableBitfields * 8);
-                            for (int n = 0; n < Tables[i].NullableColumn.Count; n++)
-                            {
-                                if (nulls[n] == 1)
-                                {
-                                    int index = Tables[i].Columns.IndexOf(Tables[i].NullableColumn[n]);
-                                    row[index] = null;
-                                }
-                            }
-                        }
-                        Tables[i].Rows.Add(row);
+                        // just read the basic type now, unpack & decrypt later to reduce seeking
+                        row.Fields.Add(ReadCell(inflated, rowStart + fieldInfo[z].start, (DBType)fieldInfo[z].type, fallback));
                     }
+
+                    // The null bits follow the used bytes, which can end after the last field
+                    int nullStart = rowStart + tableInfo.numUsedBytes;
+                    for (int n = 0; n < nullable.Length; n++)
+                    {
+                        if (((inflated[nullStart + (n >> 3)] >> (n & 7)) & 1) != 0)
+                        {
+                            row[nullable[n]] = null;
+                        }
+                    }
+                    tableRows[block.Table][y] = row;
                 }
-            });
+                return fallback;
+            }, fallback => fallback.Dispose());
+
+            for (int i = 0; i < indexLength; i++)
+            {
+                Tables[i].Rows = new List<Row>(tableRows[i]);
+            }
 
             inflated = null;
 
@@ -256,151 +254,210 @@ namespace FauFau.Formats
 
         private void ParsePoolVersion1000(byte[] dataBlock)
         {
-            // Get the unique keys from all pool type cell values
+            // The row is part of the seed, so the same key can decode differently per row
             HashSet<(ulong, int)> uniqueKeys = new HashSet<(ulong, int)>();
-            ConcurrentQueue<(ulong, int)> uniqueQueue = new ConcurrentQueue<(ulong, int)>();
-            for (int i = 0; i < Tables.Count; i++)
+            foreach (Table table in Tables)
             {
-                for (int x = 0; x < Tables[i].Columns.Count; x++)
+                for (int x = 0; x < table.Columns.Count; x++)
                 {
-                    DBType type = Tables[i].Columns[x].Type;
-                    if (IsDataType(type))
-                    {
-                        for (int y = 0; y < Tables[i].Rows.Count; y++)
-                        {
-                            ulong? k = (ulong?)Tables[i].Rows[y][x];
-                            if (k != null)
-                            {
-                                if (!uniqueKeys.Contains(((ulong)k, y)))
-                                {
-                                    uniqueKeys.Add(((ulong)k, y));
-                                    uniqueQueue.Enqueue(((ulong)k, y));
-                                }
-                            }
-                        }
+                    if (!IsDataType(table.Columns[x].Type))
+                        continue;
 
+                    for (int y = 0; y < table.Rows.Count; y++)
+                    {
+                        if (table.Rows[y][x] is ulong key)
+                            uniqueKeys.Add((key, y));
                     }
                 }
             }
 
-            // Unpack & decrypt unique data entries to cache
-            Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i =>
-            {
-                BinaryStream dbs = new BinaryStream(new MemoryStream(dataBlock));
-                while (uniqueQueue.TryDequeue(out (ulong, int) pair))
-                {
-                    byte[] d = GetDataEntry(dbs, pair.Item1, pair.Item2);
+            (ulong, int)[] keys = new (ulong, int)[uniqueKeys.Count];
+            uniqueKeys.CopyTo(keys);
+            byte[][] entries = new byte[keys.Length][];
+            Parallel.For(0, keys.Length, i => entries[i] = GetDataEntry(dataBlock, keys[i].Item1, keys[i].Item2));
 
-                    lock (uniqueEntries1000)
-                    {
-                        uniqueEntries1000.Add(pair, d);
-                    }
-                }
-                dbs.Dispose();
-            });
+            uniqueEntries1000 = new Dictionary<(ulong, int), byte[]>(keys.Length);
+            for (int i = 0; i < keys.Length; i++)
+            {
+                uniqueEntries1000.Add(keys[i], entries[i]);
+            }
 
             // Replace all pool type cell values with the unpacked data
-            for (int z = 0; z < Tables.Count; z++)
+            Parallel.ForEach(GetRowBlocks(), block =>
             {
-                for (int x = 0; x < Tables[z].Columns.Count; x++)
+                Table table = block.Table;
+                for (int x = 0; x < table.Columns.Count; x++)
                 {
-                    DBType type = Tables[z].Columns[x].Type;
-                    if (IsDataType(type))
-                    {
-                        Parallel.For(0, Tables[z].Rows.Count, y =>
-                        {
-                            ulong? k = (ulong?)Tables[z].Rows[y][x];
-                            object obj = null;
-                            if (k != null)
-                            {
-                                if (uniqueEntries1000.TryGetValue(((ulong)k, y), out byte[] d))
-                                {
-                                    if (d != null)
-                                    {
-                                        obj = BytesToDBType(type, d);
-                                    }
-                                }
+                    DBType type = table.Columns[x].Type;
+                    if (!IsDataType(type))
+                        continue;
 
-                            }
-                            Tables[z].Rows[y][x] = obj;
-                        });
+                    for (int y = block.Start; y < block.End; y++)
+                    {
+                        object obj = null;
+                        if (table.Rows[y][x] is ulong key && uniqueEntries1000.TryGetValue((key, y), out byte[] d) && d != null)
+                        {
+                            obj = BytesToDBType(type, d);
+                        }
+                        table.Rows[y][x] = obj;
                     }
                 }
-            }
+            });
         }
 
         private void ParsePoolVersion1002(byte[] dataBlock)
         {
-            // Get the unique keys from all pool type cell values
             HashSet<uint> uniqueKeys = new HashSet<uint>();
-            ConcurrentQueue<uint> uniqueQueue = new ConcurrentQueue<uint>();
-            for (int i = 0; i < Tables.Count; i++)
+            foreach (Table table in Tables)
             {
-                for (int x = 0; x < Tables[i].Columns.Count; x++)
+                for (int x = 0; x < table.Columns.Count; x++)
                 {
-                    DBType type = Tables[i].Columns[x].Type;
-                    if (IsDataType(type))
-                    {
-                        for (int y = 0; y < Tables[i].Rows.Count; y++)
-                        {
-                            uint? k = (uint?)Tables[i].Rows[y][x];
-                            if (k != null)
-                            {
-                                if (!uniqueKeys.Contains((uint)k))
-                                {
-                                    uniqueKeys.Add((uint)k);
-                                    uniqueQueue.Enqueue((uint)k);
-                                }
-                            }
-                        }
+                    if (!IsDataType(table.Columns[x].Type))
+                        continue;
 
+                    for (int y = 0; y < table.Rows.Count; y++)
+                    {
+                        if (table.Rows[y][x] is uint key)
+                            uniqueKeys.Add(key);
                     }
                 }
             }
 
-            // Unpack & decrypt unique data entries to cache
-            Parallel.For(0, numThreads, new ParallelOptions { MaxDegreeOfParallelism = numThreads }, i =>
-            {
-                BinaryStream dbs = new BinaryStream(new MemoryStream(dataBlock));
-                while (uniqueQueue.TryDequeue(out uint key))
-                {
-                    byte[] d = GetDataEntry(dbs, key);
+            uint[] keys = new uint[uniqueKeys.Count];
+            uniqueKeys.CopyTo(keys);
+            byte[][] entries = new byte[keys.Length][];
+            Parallel.For(0, keys.Length, i => entries[i] = GetDataEntry(dataBlock, keys[i]));
 
-                    lock (uniqueEntries1002)
-                    {
-                        uniqueEntries1002.Add(key, d);
-                    }
-                }
-                dbs.Dispose();
-            });
+            uniqueEntries1002 = new Dictionary<uint, byte[]>(keys.Length);
+            for (int i = 0; i < keys.Length; i++)
+            {
+                uniqueEntries1002.Add(keys[i], entries[i]);
+            }
+
+            // Strings can't change, so cells with the same key share one, the other types are lists and get their own
+            ConcurrentDictionary<uint, string> strings = new ConcurrentDictionary<uint, string>();
 
             // Replace all pool type cell values with the unpacked data
-            for (int z = 0; z < Tables.Count; z++)
+            Parallel.ForEach(GetRowBlocks(), block =>
             {
-                for (int x = 0; x < Tables[z].Columns.Count; x++)
+                Table table = block.Table;
+                for (int x = 0; x < table.Columns.Count; x++)
                 {
-                    DBType type = Tables[z].Columns[x].Type;
-                    if (IsDataType(type))
-                    {
-                        Parallel.For(0, Tables[z].Rows.Count, y =>
-                        {
-                            uint? k = (uint?)Tables[z].Rows[y][x];
-                            object obj = null;
-                            if (k != null)
-                            {
-                                if (uniqueEntries1002.TryGetValue((uint)k, out byte[] d))
-                                {
-                                    if (d != null)
-                                    {
-                                        obj = BytesToDBType(type, d);
-                                    }
-                                }
+                    DBType type = table.Columns[x].Type;
+                    if (!IsDataType(type))
+                        continue;
 
-                            }
-                            Tables[z].Rows[y][x] = obj;
-                        });
+                    for (int y = block.Start; y < block.End; y++)
+                    {
+                        object obj = null;
+                        if (table.Rows[y][x] is uint key && uniqueEntries1002.TryGetValue(key, out byte[] d) && d != null)
+                        {
+                            obj = type == DBType.String ? strings.GetOrAdd(key, _ => Encoding.UTF8.GetString(d)) : BytesToDBType(type, d);
+                        }
+                        table.Rows[y][x] = obj;
                     }
                 }
+            });
+        }
+
+        // Boxed values can't change, so cells with the same small value share one box instead of allocating millions
+        private const int BoxCacheSize = 1024;
+        private static readonly object[] boxedBytes = CreateBoxes(256, i => (byte)i);
+        private static readonly object[] boxedUShorts = CreateBoxes(BoxCacheSize, i => (ushort)i);
+        private static readonly object[] boxedUInts = CreateBoxes(BoxCacheSize, i => (uint)i);
+        private static readonly object[] boxedInts = CreateBoxes(BoxCacheSize, i => i);
+        private static readonly object boxedZeroFloat = 0f;
+        private static readonly object boxedOneFloat = 1f;
+
+        private static object[] CreateBoxes(int count, Func<int, object> box)
+        {
+            object[] boxes = new object[count];
+            for (int i = 0; i < count; i++)
+            {
+                boxes[i] = box(i);
+            }
+            return boxes;
+        }
+
+        private static object Box(uint value) => value < BoxCacheSize ? boxedUInts[value] : value;
+        private static object Box(ushort value) => value < BoxCacheSize ? boxedUShorts[value] : value;
+        private static object Box(int value) => (uint)value < BoxCacheSize ? boxedInts[value] : value;
+
+        private static object Box(float value)
+        {
+            // Compare the bits, so -0 keeps its sign
+            int bits = BitConverter.SingleToInt32Bits(value);
+            return bits == 0 ? boxedZeroFloat : bits == 0x3F800000 ? boxedOneFloat : value;
+        }
+
+        private const int RowBlockSize = 8192;
+
+        private static IEnumerable<(int Table, int Start, int End)> GetRowBlocks(Row[][] tableRows)
+        {
+            for (int i = 0; i < tableRows.Length; i++)
+            {
+                for (int start = 0; start < tableRows[i].Length; start += RowBlockSize)
+                {
+                    yield return (i, start, System.Math.Min(start + RowBlockSize, tableRows[i].Length));
+                }
+            }
+        }
+
+        private IEnumerable<(Table Table, int Start, int End)> GetRowBlocks()
+        {
+            foreach (Table table in Tables)
+            {
+                for (int start = 0; start < table.Rows.Count; start += RowBlockSize)
+                {
+                    yield return (table, start, System.Math.Min(start + RowBlockSize, table.Rows.Count));
+                }
+            }
+        }
+
+        // Reads the common types straight from the payload, the rest through Bitter like ReadDBType
+        private object ReadCell(byte[] data, int offset, DBType type, BinaryStream fallback)
+        {
+            ReadOnlySpan<byte> span = data.AsSpan(offset);
+            switch (type)
+            {
+                case DBType.Byte:
+                    return boxedBytes[data[offset]];
+                case DBType.UShort:
+                    return Box(BinaryPrimitives.ReadUInt16LittleEndian(span));
+                case DBType.UInt:
+                    return Box(BinaryPrimitives.ReadUInt32LittleEndian(span));
+                case DBType.ULong:
+                    return BinaryPrimitives.ReadUInt64LittleEndian(span);
+                case DBType.SByte:
+                    return (sbyte)data[offset];
+                case DBType.Short:
+                    return BinaryPrimitives.ReadInt16LittleEndian(span);
+                case DBType.Int:
+                    return Box(BinaryPrimitives.ReadInt32LittleEndian(span));
+                case DBType.Long:
+                    return BinaryPrimitives.ReadInt64LittleEndian(span);
+                case DBType.Float:
+                    return Box(BinaryPrimitives.ReadSingleLittleEndian(span));
+                case DBType.Double:
+                    return BinaryPrimitives.ReadDoubleLittleEndian(span);
+                case DBType.Vector2:
+                    return new Vector2 { x = BinaryPrimitives.ReadSingleLittleEndian(span), y = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(4)) };
+                case DBType.Vector3:
+                    return new Vector3 { x = BinaryPrimitives.ReadSingleLittleEndian(span), y = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(4)), z = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(8)) };
+                case DBType.Vector4:
+                    return new Vector4 { x = BinaryPrimitives.ReadSingleLittleEndian(span), y = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(4)), z = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(8)), w = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(12)) };
+                case DBType.String:
+                case DBType.Blob:
+                case DBType.ByteArray:
+                case DBType.UShortArray:
+                case DBType.UIntArray:
+                case DBType.Vector2Array:
+                case DBType.Vector3Array:
+                case DBType.Vector4Array:
+                    return memoryVersion == 1000 ? (object)BinaryPrimitives.ReadUInt64LittleEndian(span) : BinaryPrimitives.ReadUInt32LittleEndian(span);
+                default:
+                    fallback.ByteOffset = offset;
+                    return ReadDBType(fallback, type);
             }
         }
 
@@ -890,40 +947,38 @@ namespace FauFau.Formats
             return data;
         }
 
-        private byte[] GetDataEntry(BinaryStream bs, ulong key, int row)
+        private byte[] GetDataEntry(byte[] pool, ulong key, int row)
         {
-            uint address = (uint)(key & 0x00000000FFFFFFFFU);
-            uint length = (uint)(key >> 32);
+            int address = (int)(key & 0x00000000FFFFFFFFU);
+            int length = (int)(key >> 32);
             if (length == 0)
                 return null;
 
-            bs.ByteOffset = address;
-            byte[] data = bs.Read.ByteArray((int)length);
+            byte[] data = pool.AsSpan(address, length).ToArray();
             MersenneTwister.Xor((uint)row, data);
             return data;
         }
 
-        private byte[] GetDataEntry(BinaryStream bs, uint key)
+        private byte[] GetDataEntry(byte[] pool, uint key)
         {
-            uint address = key >> 1;
-            uint length;
-
+            int address;
+            int length;
             if ((key & 1) > 0)
             {
-                bs.ByteOffset = address;
-                length = bs.Read.UShort();
+                address = (int)(key >> 1);
+                length = BinaryPrimitives.ReadUInt16LittleEndian(pool.AsSpan(address));
+                address += 2;
             }
             else
             {
-                length = BitConverter.GetBytes(key)[3];
-                address = 0x7FFFFF & address;
-                bs.ByteOffset = address;
+                address = (int)((key >> 1) & 0x7FFFFF);
+                length = (int)(key >> 24);
             }
 
             if (length == 0)
                 return null;
 
-            byte[] data = bs.Read.ByteArray((int)length);
+            byte[] data = pool.AsSpan(address, length).ToArray();
             if (Flags.HasFlag(HeaderFlags.Client))
             {
                 MersenneTwister.Xor(key, data);
