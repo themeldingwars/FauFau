@@ -28,8 +28,6 @@ namespace FauFau.Formats
         private Dictionary<(ulong, int), byte[]> uniqueEntries1000 = new ();
         private Dictionary<uint, byte[]> uniqueEntries1002 = new ();
 
-        // One MersenneTwister per thread & reseed per entry
-        private static readonly ThreadLocal<MersenneTwister> threadMt = new (() => new MersenneTwister());
 
         #region File read & write
         public override void Read(BinaryStream bs)
@@ -885,75 +883,28 @@ namespace FauFau.Formats
         }
 
         private byte[] TwistDataEntry(uint key, byte[] data) {
-            uint length = (uint) data.Length;
-            byte[] ret = null;
-            if (length > 0)
-            {
-                MersenneTwister mt = threadMt.Value;
-                mt.Reseed(key);
-                uint x = length >> 2;
-                uint y = length & 3;
+            if (data.Length == 0)
+                return null;
 
-                byte[] xor = new byte[length];
-
-                for (int i = 0; i < x; i++)
-                {
-                    WriteToBufferLE(xor, mt.Next(), i * 4);
-                }
-                int z = (int)x * 4;
-                for (uint i = 0; i < y; i++)
-                {
-                    xor[z + i] = (byte)mt.Next();
-                }
-                for (int i = 0; i < length; i++)
-                {
-                    data[i] ^= xor[i];
-                }
-                ret = data;
-            }
-            return ret;
+            MersenneTwister.Xor(key, data);
+            return data;
         }
 
         private byte[] GetDataEntry(BinaryStream bs, ulong key, int row)
         {
-            byte[] ret = null;
-
             uint address = (uint)(key & 0x00000000FFFFFFFFU);
             uint length = (uint)(key >> 32);
+            if (length == 0)
+                return null;
 
             bs.ByteOffset = address;
-            if (length > 0)
-            {
-                MersenneTwister mt = threadMt.Value;
-                mt.Reseed((uint)row);
-                uint x = length >> 2;
-                uint y = length & 3;
-
-                byte[] data = bs.Read.ByteArray((int)length);
-                byte[] xor = new byte[length];
-
-                for (int i = 0; i < x; i++)
-                {
-                    WriteToBufferLE(xor, mt.Next(), i * 4);
-                }
-                int z = (int)x * 4;
-                for (uint i = 0; i < y; i++)
-                {
-                    xor[z + i] = (byte)mt.Next();
-                }
-                for (int i = 0; i < length; i++)
-                {
-                    data[i] ^= xor[i];
-                }
-                ret = data;
-            }
-            return ret;
+            byte[] data = bs.Read.ByteArray((int)length);
+            MersenneTwister.Xor((uint)row, data);
+            return data;
         }
 
         private byte[] GetDataEntry(BinaryStream bs, uint key)
         {
-            byte[] ret = null;
-
             uint address = key >> 1;
             uint length;
 
@@ -969,37 +920,15 @@ namespace FauFau.Formats
                 bs.ByteOffset = address;
             }
 
-            if (length > 0 && !Flags.HasFlag(HeaderFlags.Client))
+            if (length == 0)
+                return null;
+
+            byte[] data = bs.Read.ByteArray((int)length);
+            if (Flags.HasFlag(HeaderFlags.Client))
             {
-                return bs.Read.ByteArray((int)length);
+                MersenneTwister.Xor(key, data);
             }
-
-            if (length > 0)
-            {
-                MersenneTwister mt = threadMt.Value;
-                mt.Reseed(key);
-                uint x = length >> 2;
-                uint y = length & 3;
-
-                byte[] data = bs.Read.ByteArray((int)length);
-                byte[] xor = new byte[length];
-
-                for (int i = 0; i < x; i++)
-                {
-                    WriteToBufferLE(xor, mt.Next(), i * 4);
-                }
-                int z = (int)x * 4;
-                for (uint i = 0; i < y; i++)
-                {
-                    xor[z + i] = (byte)mt.Next();
-                }
-                for (int i = 0; i < length; i++)
-                {
-                    data[i] ^= xor[i];
-                }
-                ret = data;
-            }
-            return ret;
+            return data;
         }
         private byte[] DBTypeToBytes(DBType type, object data)
         {

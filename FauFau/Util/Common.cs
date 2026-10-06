@@ -15,53 +15,17 @@ namespace FauFau.Util
 
         public static void MTXor(uint seed, ref byte[] data)
         {
-            MersenneTwister mt = new MersenneTwister(seed);
-            uint l = (uint)data.Length;
-            uint x = l >> 2;
-            uint y = l & 3;
-            byte[] xor = new byte[l];
-            for (int i = 0; i < x; i++)
-            {
-                WriteToBufferLE(xor, mt.Next(), i * 4);
-            }
-            int z = (int)x * 4;
-            for (uint i = 0; i < y; i++)
-            {
-                xor[z + i] = (byte)mt.Next();
-            }
-            for (int i = 0; i < l; i++)
-            {
-                data[i] ^= xor[i];
-            }
-            mt = null;
+            MersenneTwister.Xor(seed, data);
         }
 
         public static void MTXor(uint seed, BinaryStream source, BinaryStream destination, int start = -1, int length = -1)
         {
-            MersenneTwister mt = new MersenneTwister(seed);
             if (start > 0) { source.ByteOffset = start; }
             uint l = (uint)(length > 0 ? length : (source.Length - source.ByteOffset));
-            uint x = l >> 2;
-            uint y = l & 3;
 
             byte[] data = source.Read.ByteArray((int)l);
-            byte[] xor = new byte[l];
-
-            for (int i = 0; i < x; i++)
-            {
-                WriteToBufferLE(xor, mt.Next(), i * 4);
-            }
-            int z = (int)x * 4;
-            for (uint i = 0; i < y; i++)
-            {
-                xor[z + i] = (byte)mt.Next();
-            }
-            for (int i = 0; i < l; i++)
-            {
-                data[i] ^= xor[i];
-            }
+            MersenneTwister.Xor(seed, data);
             destination.Write.ByteArray(data);
-            mt = null;
         }
 
         public static void MTXorOldest(uint seed, BinaryStream source, BinaryStream destination, int start = -1, int length = -1)

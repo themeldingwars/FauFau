@@ -1,3 +1,4 @@
+using System;
 using FauFau.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shouldly;
@@ -37,6 +38,30 @@ namespace FauFau.Tests
             uint[] values = mt.Next(3);
 
             values.ShouldBe(new[] { 0x31076B2FU, 0x7F66E2D3U, 0x9F428526U });
+        }
+
+        [TestMethod]
+        [DataRow(0)]
+        [DataRow(1)]
+        [DataRow(7)]
+        [DataRow(908)]
+        [DataRow(909)]
+        [DataRow(911)]
+        [DataRow(5000)]
+        public void Xor_MatchesSequentialOutputs(int length)
+        {
+            byte[] data = new byte[length];
+            new System.Random(length).NextBytes(data);
+            byte[] expected = (byte[])data.Clone();
+            MersenneTwister mt = new MersenneTwister(0xC0FFEE);
+            for (int i = 0; i < length / 4; i++)
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(expected.AsSpan(i * 4), System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(expected.AsSpan(i * 4)) ^ mt.Next());
+            for (int i = length / 4 * 4; i < length; i++)
+                expected[i] ^= (byte)mt.Next();
+
+            MersenneTwister.Xor(0xC0FFEE, data);
+
+            data.ShouldBe(expected);
         }
 
         [TestMethod]
