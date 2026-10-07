@@ -185,7 +185,7 @@ namespace FauFau.Formats
                 // Each stream has its own first property byte, the dictionary size is shared
                 byte[] properties = data.AsSpan(0, 5).ToArray();
                 properties[0] = data[HeaderSize + i];
-                position += Lzma.DecompressInto(properties, data, position, data.Length - position, planes.AsSpan(planeOffset, streamSizes[i]));
+                position += Lzma.DecompressInto(properties, data, position, data.Length - position, planes, planeOffset, streamSizes[i]);
                 planeOffset += streamSizes[i];
             }
 
