@@ -1,8 +1,10 @@
 using Bitter;
 using FauFau.Util;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace FauFau.Formats
 {
@@ -44,22 +46,17 @@ namespace FauFau.Formats
             for (int level = 0; level < LevelCount; level++)
             {
                 int compressedSize = Read.Int();
-                byte[] table = FastLz.Decompress(Read.ByteArray(compressedSize));
-                if (table.Length % 16 != 0)
+                // The rows have the layout of TileInfo, so FastLZ decodes the table straight into the array
+                TileInfo[] tiles = new TileInfo[(1024 >> level) * (1024 >> level)];
+                FastLz.Decompress(Read.ByteArray(compressedSize), MemoryMarshal.AsBytes(tiles.AsSpan()));
+                if (!BitConverter.IsLittleEndian)
                 {
-                    throw new InvalidDataException($"The tile table of level {level} has {table.Length} bytes, not a multiple of 16");
-                }
-
-                BinaryStream tableStream = new BinaryStream(new MemoryStream(table));
-                TileInfo[] tiles = new TileInfo[table.Length / 16];
-                for (int i = 0; i < tiles.Length; i++)
-                {
-                    tiles[i] = new TileInfo
+                    for (int i = 0; i < tiles.Length; i++)
                     {
-                        Offset = tableStream.Read.ULong(),
-                        Crc = tableStream.Read.UInt(),
-                        Size = tableStream.Read.UInt(),
-                    };
+                        tiles[i].Offset = BinaryPrimitives.ReverseEndianness(tiles[i].Offset);
+                        tiles[i].Crc = BinaryPrimitives.ReverseEndianness(tiles[i].Crc);
+                        tiles[i].Size = BinaryPrimitives.ReverseEndianness(tiles[i].Size);
+                    }
                 }
                 Tiles[level] = tiles;
             }
@@ -89,6 +86,7 @@ namespace FauFau.Formats
             public uint Crc;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
         public struct TileInfo
         {
             public ulong Offset;

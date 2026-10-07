@@ -6,11 +6,38 @@ namespace FauFau.Util
     // FastLZ level 1 and 2 decompression, the virtual texture index uses it for its tile tables
     public static class FastLz
     {
-        public static byte[] Decompress(ReadOnlySpan<byte> source)
+        public static byte[] Decompress(ReadOnlySpan<byte> source, int sizeHint = 0)
+        {
+            byte[] output = new byte[System.Math.Max(sizeHint, source.Length * 4)];
+            int length;
+            while ((length = TryDecompress(source, output)) < 0)
+            {
+                output = new byte[output.Length * 2];
+            }
+
+            if (length != output.Length)
+            {
+                Array.Resize(ref output, length);
+            }
+            return output;
+        }
+
+        // Throws unless the data decodes to exactly the length of destination
+        public static void Decompress(ReadOnlySpan<byte> source, Span<byte> destination)
+        {
+            int length = TryDecompress(source, destination);
+            if (length != destination.Length)
+            {
+                throw new InvalidDataException($"FastLZ data doesn't decode to the expected {destination.Length} bytes");
+            }
+        }
+
+        // Returns the decoded length, or -1 when the output is too small
+        private static int TryDecompress(ReadOnlySpan<byte> source, Span<byte> output)
         {
             if (source.IsEmpty)
             {
-                return Array.Empty<byte>();
+                return 0;
             }
 
             // The upper 3 bits of the first byte are the level
@@ -20,7 +47,7 @@ namespace FauFau.Util
                 throw new InvalidDataException($"FastLZ level {level} isn't supported");
             }
 
-            MemoryStream output = new MemoryStream(source.Length * 4);
+            int length = 0;
             int position = 0;
             int control = source[position++] & 31;
             while (true)
@@ -29,19 +56,24 @@ namespace FauFau.Util
                 {
                     int literals = control + 1;
                     Require(source, position, literals);
-                    output.Write(source.Slice(position, literals));
+                    if (length + literals > output.Length)
+                    {
+                        return -1;
+                    }
+                    source.Slice(position, literals).CopyTo(output.Slice(length));
                     position += literals;
+                    length += literals;
                 }
                 else
                 {
-                    int length = (control >> 5) - 1;
+                    int matchLength = (control >> 5) - 1;
                     int distance = (control & 31) << 8;
-                    if (length == 6)
+                    if (matchLength == 6)
                     {
                         if (level == 1)
                         {
                             Require(source, position, 1);
-                            length += source[position++];
+                            matchLength += source[position++];
                         }
                         else
                         {
@@ -50,7 +82,7 @@ namespace FauFau.Util
                             {
                                 Require(source, position, 1);
                                 extra = source[position++];
-                                length += extra;
+                                matchLength += extra;
                             } while (extra == 255);
                         }
                     }
@@ -65,34 +97,39 @@ namespace FauFau.Util
                         position += 2;
                     }
 
-                    long reference = output.Length - distance - 1;
+                    int reference = length - distance - 1;
                     if (reference < 0)
                     {
                         throw new InvalidDataException("FastLZ match points before the start of the data");
                     }
 
-                    // Matches can overlap the bytes they produce
-                    length += 3;
-                    byte[] buffer = output.GetBuffer();
-                    for (int i = 0; i < length; i++)
+                    matchLength += 3;
+                    if (length + matchLength > output.Length)
                     {
-                        if (output.Length == buffer.Length)
-                        {
-                            output.Capacity = buffer.Length * 2;
-                            buffer = output.GetBuffer();
-                        }
-                        output.WriteByte(buffer[reference + i]);
+                        return -1;
                     }
+
+                    // A match can overlap the bytes it produces, those have to be copied byte by byte
+                    if (reference + matchLength <= length)
+                    {
+                        output.Slice(reference, matchLength).CopyTo(output.Slice(length));
+                    }
+                    else
+                    {
+                        for (int i = 0; i < matchLength; i++)
+                        {
+                            output[length + i] = output[reference + i];
+                        }
+                    }
+                    length += matchLength;
                 }
 
                 if (position >= source.Length)
                 {
-                    break;
+                    return length;
                 }
                 control = source[position++];
             }
-
-            return output.ToArray();
         }
 
         private static void Require(ReadOnlySpan<byte> source, int position, int count)

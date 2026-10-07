@@ -109,14 +109,32 @@ namespace FauFau.Tests
             act.ShouldThrow<NotSupportedException>();
         }
 
-        private static byte[] FastLzLiterals(byte[] data)
+        private static byte[] FastLzRepeatedRows(byte[] firstRow, byte[] otherRows, int rowCount)
         {
             MemoryStream output = new MemoryStream();
-            for (int i = 0; i < data.Length; i += 32)
+            output.WriteByte(15);
+            output.Write(firstRow);
+            output.WriteByte(15);
+            output.Write(otherRows);
+            int remaining = (rowCount - 2) * 16;
+            while (remaining > 0)
             {
-                int count = System.Math.Min(32, data.Length - i);
-                output.WriteByte((byte)(count - 1));
-                output.Write(data, i, count);
+                int length = System.Math.Min(264, remaining);
+                if (length < 3)
+                {
+                    length = 3;
+                }
+                if (length - 3 < 6)
+                {
+                    output.WriteByte((byte)((length - 2) << 5));
+                }
+                else
+                {
+                    output.WriteByte(0xE0);
+                    output.WriteByte((byte)(length - 9));
+                }
+                output.WriteByte(15);
+                remaining -= length;
             }
             return output.ToArray();
         }
@@ -134,12 +152,10 @@ namespace FauFau.Tests
             stream.Write.UInt(0xDEADBEEF);
             for (int level = 0; level < VTexIndex.LevelCount; level++)
             {
-                BinaryStream table = new BinaryStream(new MemoryStream());
-                table.Write.ULong(level == 0 ? 1234UL : ulong.MaxValue);
-                table.Write.UInt(level == 0 ? 0xCAFEU : uint.MaxValue);
-                table.Write.UInt(level == 0 ? 99U : uint.MaxValue);
-                table.ByteOffset = 0;
-                byte[] compressed = FastLzLiterals(table.Read.ByteArray((int)table.Length));
+                byte[] tile = BitConverter.GetBytes(1234UL).Concat(BitConverter.GetBytes(0xCAFEU)).Concat(BitConverter.GetBytes(99U)).ToArray();
+                byte[] empty = Enumerable.Repeat((byte)0xFF, 16).ToArray();
+                int side = 1024 >> level;
+                byte[] compressed = FastLzRepeatedRows(level == 0 ? tile : empty, empty, side * side);
                 stream.Write.Int(compressed.Length);
                 stream.Write.ByteArray(compressed);
             }
@@ -155,6 +171,8 @@ namespace FauFau.Tests
             index.Tiles[0][0].Exists.ShouldBeTrue();
             index.Tiles[0][0].Offset.ShouldBe(1234UL);
             index.Tiles[0][0].Size.ShouldBe(99U);
+            index.Tiles[0][1].Exists.ShouldBeFalse();
+            index.Tiles[0].Length.ShouldBe(1024 * 1024);
             index.Tiles[6][0].Exists.ShouldBeFalse();
         }
 
