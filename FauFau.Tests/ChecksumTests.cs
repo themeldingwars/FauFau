@@ -31,5 +31,17 @@ namespace FauFau.Tests
 
             stringHash.ShouldBe(bytesHash);
         }
+
+        [TestMethod]
+        [DataRow("", 0x00000000U)]
+        [DataRow("123456789", 0xCBF43926U)]
+        public void Crc32_MatchesKnownChecksum(string input, uint expected)
+        {
+            byte[] bytes = Encoding.ASCII.GetBytes(input);
+
+            uint crc = Checksum.Crc32(bytes);
+
+            crc.ShouldBe(expected);
+        }
     }
 }

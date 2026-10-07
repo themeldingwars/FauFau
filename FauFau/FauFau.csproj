@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="SharpCompress" Version="[0.50.4,)" />
+    <PackageReference Include="System.IO.Hashing" Version="[8.0.0,)" />
     <PackageReference Include="TMW.Bitter" Version="[1.1.10,)" />
     <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.94">
       <PrivateAssets>all</PrivateAssets>
