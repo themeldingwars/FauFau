@@ -84,17 +84,6 @@ namespace FauFau.Net.Web
             return part;
         }
 
-        public static ReadOnlySpan<char> GenerateUserId(ReadOnlySpan<char> email, bool urlEncode = false)
-        {
-            var uid = Auth.GenerateUserId(email);
-            return urlEncode ? HttpUtility.UrlEncode(uid.ToString()) : uid;
-        }
-
-        public static ReadOnlySpan<char> GenerateSecret(ReadOnlySpan<char> email, ReadOnlySpan<char> password)
-        {
-            return Auth.GenerateSecret(email, password);
-        }
-
         public static ReadOnlySpan<char> CreateRequestString(ReadOnlySpan<char> uid,  ReadOnlySpan<char> host,
                                                              ReadOnlySpan<char> path, ReadOnlySpan<char> hbody,
                                                              ulong              cid = 0)
@@ -115,13 +104,6 @@ namespace FauFau.Net.Web
                 $"ver={VERSION}&tc={time}&nonce={nonce}&uid={Uri.EscapeDataString(uid.ToString())}&host={Uri.EscapeDataString(host.ToString())}&path={Uri.EscapeDataString(path.ToString())}&hbody={hbody}&cid={cid}";
 
             return requestStr.AsSpan();
-        }
-
-        public static ReadOnlySpan<char> GenerateToken(ReadOnlySpan<char> secret, ReadOnlySpan<char> reqStr)
-        {
-            var token = new char[40];
-            Auth.GenerateToken(secret, reqStr, token);
-            return token;
         }
     }
 }

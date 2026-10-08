@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using FauFau.Net.Web;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shouldly;
@@ -60,34 +60,6 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
-        public void GenerateUserId_MatchesAuthIgnoringCase()
-        {
-            string expected = Auth.GenerateUserId("test@mail.com").ToString();
-
-            string userId = Red5Sig.GenerateUserId("Test@Mail.com").ToString();
-
-            userId.ShouldBe(expected);
-        }
-
-        [TestMethod]
-        public void GenerateUserId_UrlEncode_EncodesBase64()
-        {
-            string userId = Red5Sig.GenerateUserId("test@mail.com", true).ToString();
-
-            userId.ShouldBe("Qth4CwFkTyixv3NPM6V8RL4BByY%3d");
-        }
-
-        [TestMethod]
-        public void GenerateSecret_MatchesClientSecret()
-        {
-            const string expected = "36e3788836c2c0c2335d6e7b96220fe1fac1a898";
-
-            string secret = Red5Sig.GenerateSecret("test@mail.com", "password").ToString();
-
-            secret.ShouldBe(expected);
-        }
-
-        [TestMethod]
         public void CreateRequestString_MatchesClientRequest()
         {
             const string uid = "Qth4CwFkTyixv3NPM6V8RL4BByY=";
@@ -111,14 +83,6 @@ namespace FauFau.Tests
             sig.Time.ShouldBeInRange(before, before + 5);
             sig.Nonce.Length.ShouldBe(16);
             sig.Cid.ShouldBe(9197696484326682622UL);
-        }
-
-        [TestMethod]
-        public void GenerateToken_MatchesKnownValue()
-        {
-            string token = Red5Sig.GenerateToken(Secret, Request).ToString();
-
-            token.ShouldBe(Token);
         }
     }
 }
