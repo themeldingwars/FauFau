@@ -68,6 +68,62 @@ namespace FauFau.Net.Web
             return sig;
         }
 
+        public enum VerifyResult
+        {
+            Valid,
+            Malformed,
+            InvalidToken,
+            BodyMismatch,
+            Expired,
+            HostMismatch,
+            PathMismatch
+        }
+
+        // Checks the token and that the signed values belong to this request. Host and path are only compared when given,
+        // since a proxy in front of the server can change them. Replayed nonces have to be tracked by the caller.
+        public static VerifyResult Verify(ReadOnlySpan<char> secret, ReadOnlySpan<char> header, ReadOnlySpan<byte> body,
+                                          DateTimeOffset     now,    TimeSpan           maxClockSkew,
+                                          ReadOnlySpan<char> host = default, ReadOnlySpan<char> path = default)
+        {
+            var sig = ParseString(header);
+            if (sig.Version == 0 || sig.Token.Length != 40 || sig.Body.Length != 40)
+                return VerifyResult.Malformed;
+
+            if (!Auth.Verify(secret, header))
+                return VerifyResult.InvalidToken;
+
+            Span<char> hbody = stackalloc char[40];
+            HashBody(body, hbody);
+            if (!sig.Body.Equals(hbody, StringComparison.OrdinalIgnoreCase))
+                return VerifyResult.BodyMismatch;
+
+            if ((now - DateTimeOffset.FromUnixTimeSeconds(sig.Time)).Duration() > maxClockSkew)
+                return VerifyResult.Expired;
+
+            if (!host.IsEmpty && !sig.Host.Equals(host, StringComparison.OrdinalIgnoreCase))
+                return VerifyResult.HostMismatch;
+
+            if (!path.IsEmpty && !sig.Path.SequenceEqual(path))
+                return VerifyResult.PathMismatch;
+
+            return VerifyResult.Valid;
+        }
+
+        // The hbody value, a lowercase SHA-1 of the request body
+        public static string HashBody(ReadOnlySpan<byte> body)
+        {
+            var hbody = new char[40];
+            HashBody(body, hbody);
+            return new string(hbody);
+        }
+
+        private static void HashBody(ReadOnlySpan<byte> body, Span<char> hbody)
+        {
+            Span<byte> hash = stackalloc byte[20];
+            SHA1.HashData(body, hash);
+            Hex.TryEncode(hash, hbody, false);
+        }
+
         // Returns everything before the separator and drops it from the source, or the whole source without one
         private static ReadOnlySpan<char> ReadUntil(scoped ref ReadOnlySpan<char> source, char separator)
         {
