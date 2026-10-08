@@ -238,7 +238,7 @@ namespace FauFau.Formats
                 if (Compressed)
                 {
                     // compress with gzip
-                    Util.Common.Gzip(payload, bs);
+                    Util.Compression.Gzip(payload, bs);
                 }
                 else
                 {

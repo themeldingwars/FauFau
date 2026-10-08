@@ -100,7 +100,7 @@ namespace FauFau.Net.Web
                                                              ulong              cid = 0)
         {
             var time  = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var nonce = Common.BytesToHexString(RandomNumberGenerator.GetBytes(8), false);
+            var nonce = Hex.Encode(RandomNumberGenerator.GetBytes(8), false);
 
             return CreateRequestString(uid, host, path, hbody, cid, time, nonce);
         }

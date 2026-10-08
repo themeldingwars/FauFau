@@ -11,7 +11,6 @@ using Bitter;
 using FauFau.Util;
 using FauFau.Util.CommmonDataTypes;
 using static Bitter.BinaryUtil;
-using static FauFau.Util.Common;
 
 namespace FauFau.Formats
 {
@@ -45,7 +44,7 @@ namespace FauFau.Formats
             // Deobfuscate
             byte[] data = bs.Read.ByteArray((int)headerInfo.payloadSize);
             if (Flags.HasFlag(HeaderFlags.ObfuscatedPool)) {
-                MTXor(Checksum.FFnv32(headerInfo.patchName), ref data);
+                MersenneTwister.Xor(Checksum.FFnv32(headerInfo.patchName), data);
             }
 
             // Decompress
@@ -527,8 +526,8 @@ namespace FauFau.Formats
                 gen_tableInfo.numFields = (ushort) table.Columns.Count;
                 gen_tableInfo.nullableBitfields = table.NullableColumn.Count > 0 ? (byte) System.Math.Ceiling((double)table.NullableColumn.Count/8) : (byte) 0;
                 gen_tableInfo.numUsedBytes = (ushort) currentWidth;
-                int mustBeDivisableBy4 = 4;
-                gen_tableInfo.numBytes = (ushort) FindClosestLargerNumber(gen_tableInfo.numUsedBytes + gen_tableInfo.nullableBitfields, mustBeDivisableBy4);
+                // Rows are 4 byte aligned
+                gen_tableInfo.numBytes = (ushort) ((gen_tableInfo.numUsedBytes + gen_tableInfo.nullableBitfields + 3) & ~3);
 
                 // RowInfo
                 RowInfo gen_rowInfo = new RowInfo();
@@ -633,8 +632,7 @@ namespace FauFau.Formats
                 if (rowInfo.rowCount > 0) {
                     // Calc table length and add offset for alignment, the last row is shorter
                     uint tableLen = (uint)rows_bs.ByteOffset - rowInfo.rowOffset;
-                    int mustBeDivisableBy128 = 128;
-                    uint desiredLen = (uint) FindClosestLargerNumber((int)tableLen, mustBeDivisableBy128);
+                    uint desiredLen = (tableLen + 127) & ~127u;
                     uint requiredPadding = desiredLen - tableLen;
                     uint correctNewOffset = rowInfo.rowOffset + desiredLen;
                     if (correctNewOffset != rows_bs.ByteOffset) {
@@ -695,7 +693,7 @@ namespace FauFau.Formats
             deflated_bs.Write.UInt(0); // size = long?
             deflated_bs.Write.ByteArray(new byte[] {0x78, 0x01}); // deflate header
             inflated_bs.ByteOffset = 0;
-            Deflate(inflated_bs, deflated_bs, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed);
+            Compression.Deflate(inflated_bs, deflated_bs, SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed);
             uint payloadSize = (uint) deflated_bs.ByteOffset;
 
             // === Header Info Prep ===
@@ -711,7 +709,7 @@ namespace FauFau.Formats
             // === Obfuscate ===
             byte[] obfuscatedData = memory_deflated.ToArray();
             if (Flags.HasFlag(HeaderFlags.ObfuscatedPool)) {
-                MTXor(Checksum.FFnv32(headerInfo.patchName), ref obfuscatedData);
+                MersenneTwister.Xor(Checksum.FFnv32(headerInfo.patchName), obfuscatedData);
             }
             obfuscated_bs.Write.ByteArray(obfuscatedData);
 

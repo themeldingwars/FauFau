@@ -63,7 +63,7 @@ namespace FauFau.Net.Web
             }
 
             SC secret = new char[SHA1_LENGTH * 2];
-            Common.TryWriteBytesAsHex(hash, secret, false);
+            Hex.TryEncode(hash, secret, false);
             return secret;
         }
 
@@ -85,7 +85,7 @@ namespace FauFau.Net.Web
             HMACSHA1.HashData(key, data, hash);
             Return(rented);
 
-            Common.TryWriteBytesAsHex(hash, tokenOut, false);
+            Hex.TryEncode(hash, tokenOut, false);
         }
 
         public static bool Sign(ROSC secret, SC header)
