@@ -28,43 +28,60 @@ namespace FauFau.Net.Web
         // Read the header and return it broken up into its parts
         public static QsValues ParseString(ReadOnlySpan<char> headerStr)
         {
-            var sig          = new QsValues();
-            var headerReader = new Spanner<char>(headerStr);
-            var red5Text     = headerReader.ReadUntil(' ');
+            var sig      = new QsValues();
+            var red5Text = ReadUntil(ref headerStr, ' ');
 
             if (!red5Text.Equals("red5", StringComparison.InvariantCultureIgnoreCase))
                 return sig;
 
-            sig.Token = headerReader.ReadUntil(' ');
-            var qs = new Spanner<char>(headerReader.ReadUntil(' '));
-            sig.Token2 = headerReader.Remaining;
+            sig.Token = ReadUntil(ref headerStr, ' ');
+            var qs = ReadUntil(ref headerStr, ' ');
+            sig.Token2 = headerStr;
 
             do {
-                var kvpStr = qs.ReadUntil('&');
+                var kvpStr = ReadUntil(ref qs, '&');
                 if (kvpStr.Length == 0)
                     break;
 
-                var kvp = Spanner<char>.SplitKVP(kvpStr, '=');
+                var split = kvpStr.IndexOf('=');
+                var key   = split < 0 ? kvpStr : kvpStr.Slice(0, split);
+                var value = split < 0 ? ReadOnlySpan<char>.Empty : kvpStr.Slice(split + 1);
 
-                if (kvp.Key.Equals("ver", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Version = int.TryParse(kvp.Value, out var version) ? version : 0;
-                else if (kvp.Key.Equals("tc", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Time = uint.TryParse(kvp.Value, out var time) ? time : 0;
-                else if (kvp.Key.Equals("nonce", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Nonce = kvp.Value;
-                else if (kvp.Key.Equals("uid", StringComparison.InvariantCultureIgnoreCase))
-                    sig.UID = kvp.Value;
-                else if (kvp.Key.Equals("host", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Host = HttpUtility.UrlDecode(kvp.Value.ToString());
-                else if (kvp.Key.Equals("path", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Path = HttpUtility.UrlDecode(kvp.Value.ToString());
-                else if (kvp.Key.Equals("hbody", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Body = kvp.Value;
-                else if (kvp.Key.Equals("cid", StringComparison.InvariantCultureIgnoreCase))
-                    sig.Cid = ulong.TryParse(kvp.Value, out var cid) ? cid : 0;
+                if (key.Equals("ver", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Version = int.TryParse(value, out var version) ? version : 0;
+                else if (key.Equals("tc", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Time = uint.TryParse(value, out var time) ? time : 0;
+                else if (key.Equals("nonce", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Nonce = value;
+                else if (key.Equals("uid", StringComparison.InvariantCultureIgnoreCase))
+                    sig.UID = value;
+                else if (key.Equals("host", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Host = HttpUtility.UrlDecode(value.ToString());
+                else if (key.Equals("path", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Path = HttpUtility.UrlDecode(value.ToString());
+                else if (key.Equals("hbody", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Body = value;
+                else if (key.Equals("cid", StringComparison.InvariantCultureIgnoreCase))
+                    sig.Cid = ulong.TryParse(value, out var cid) ? cid : 0;
             } while (true);
 
             return sig;
+        }
+
+        // Returns everything before the separator and drops it from the source, or the whole source without one
+        private static ReadOnlySpan<char> ReadUntil(scoped ref ReadOnlySpan<char> source, char separator)
+        {
+            var end = source.IndexOf(separator);
+            if (end < 0)
+            {
+                var all = source;
+                source = ReadOnlySpan<char>.Empty;
+                return all;
+            }
+
+            var part = source.Slice(0, end);
+            source = source.Slice(end + 1);
+            return part;
         }
 
         public static ReadOnlySpan<char> GenerateUserId(ReadOnlySpan<char> email, bool urlEncode = false)
