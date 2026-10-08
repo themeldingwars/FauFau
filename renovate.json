@@ -23,6 +23,13 @@
         "TMW.Bitter"
       ],
       "minimumReleaseAge": "0 days"
+    },
+    {
+      "description": "Keep the System.IO.Hashing floor on 8.x so net8.0 consumers don't pull in newer runtime packages",
+      "matchDatasources": ["nuget"],
+      "matchPackageNames": ["System.IO.Hashing"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     }
   ]
 }
