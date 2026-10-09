@@ -203,14 +203,14 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
-        public void GetBytes_String_ReturnsUtf8()
+        public void GetBytes_String_ReturnsTerminatedUtf8()
         {
             byte[] bytes = WriteSample(ClientFlags);
 
             using StaticDBView view = StaticDBView.Open(bytes);
             byte[] name = FirstRow(view).GetBytes(1).ToArray();
 
-            name.ShouldBe(Encoding.UTF8.GetBytes("first"));
+            name.ShouldBe(Encoding.UTF8.GetBytes("first\0"));
         }
 
         [TestMethod]

@@ -636,7 +636,7 @@ namespace FauFau.Formats
             public string GetString(int column)
             {
                 ReadOnlySpan<byte> entry = Entry(column, DBType.String);
-                return entry.IsEmpty ? null : Encoding.UTF8.GetString(entry);
+                return entry.IsEmpty ? null : StaticDB.DecodeString(entry);
             }
 
             public ReadOnlySpan<ushort> GetUShorts(int column) => MemoryMarshal.Cast<byte, ushort>(Entry(column, DBType.UShortArray));

@@ -186,6 +186,32 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
+        public void Write_TerminatesStrings()
+        {
+            StaticDB sdb = CreateSample();
+            sdb.Flags = HeaderFlags.Compressed;
+
+            sdb.Write(out byte[] bytes);
+            bool terminated = InflatePayload(bytes).AsSpan().IndexOf(Encoding.UTF8.GetBytes("second\0")) >= 0;
+
+            terminated.ShouldBeTrue();
+        }
+
+        [TestMethod]
+        [DataRow("")]
+        [DataRow("\u0001\u0000\u0000\u0006Round ")]
+        [DataRow("\u0001\u0000\u0000\u0000")]
+        public void WriteRead_StringsWithZeros_KeepsThem(string text)
+        {
+            StaticDB sdb = CreateSample();
+            sdb[0][1].Fields[1] = text;
+
+            Table table = RoundTrip(sdb).GetTableByName(TableName);
+
+            table[1].Fields[1].ShouldBe(text);
+        }
+
+        [TestMethod]
         [DataRow(HeaderFlags.Compressed)]
         [DataRow(HeaderFlags.ObfuscatedPool | HeaderFlags.Compressed | HeaderFlags.Client)]
         public void WriteRead_PoolFlags_KeepsRows(HeaderFlags flags)

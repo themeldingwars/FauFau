@@ -356,7 +356,7 @@ namespace FauFau.Formats
                         object obj = null;
                         if (table.Rows[y][x] is uint key && uniqueEntries1002.TryGetValue(key, out byte[] d) && d != null)
                         {
-                            obj = type == DBType.String ? strings.GetOrAdd(key, _ => Encoding.UTF8.GetString(d)) : BytesToDBType(type, d);
+                            obj = type == DBType.String ? strings.GetOrAdd(key, _ => DecodeString(d)) : BytesToDBType(type, d);
                         }
                         table.Rows[y][x] = obj;
                     }
@@ -995,7 +995,7 @@ namespace FauFau.Formats
             switch (type)
             {
                 case DBType.String:
-                    bytes = Encoding.UTF8.GetBytes((string)data);
+                    bytes = EncodeString((string)data);
                     break;
                 case DBType.Blob:
                 case DBType.ByteArray:
@@ -1051,12 +1051,29 @@ namespace FauFau.Formats
             }
             return bytes;
         }
+
+        // Strings in the pool end with one NUL. Only that one goes, localized text can end in a parameter header full of zeros
+        internal static string DecodeString(ReadOnlySpan<byte> data)
+        {
+            if (!data.IsEmpty && data[^1] == 0)
+                data = data.Slice(0, data.Length - 1);
+
+            return Encoding.UTF8.GetString(data);
+        }
+
+        internal static byte[] EncodeString(string value)
+        {
+            byte[] bytes = new byte[Encoding.UTF8.GetByteCount(value) + 1];
+            Encoding.UTF8.GetBytes(value, bytes);
+            return bytes;
+        }
+
         private object BytesToDBType(DBType type, byte[] data)
         {
             switch (type)
             {
                 case DBType.String:
-                    return Encoding.UTF8.GetString(data);
+                    return DecodeString(data);
 
                 case DBType.Blob:
                 case DBType.ByteArray:
