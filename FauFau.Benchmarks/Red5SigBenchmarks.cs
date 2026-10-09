@@ -41,13 +41,13 @@ namespace FauFau.Benchmarks
         [Benchmark]
         public int GenerateUserId()
         {
-            return Red5Sig.GenerateUserId(Email).Length;
+            return Auth.GenerateUserId(Email).Length;
         }
 
         [Benchmark]
         public int GenerateSecret()
         {
-            return Red5Sig.GenerateSecret(Email, Password).Length;
+            return Auth.GenerateSecret(Email, Password).Length;
         }
     }
 }
