@@ -25,6 +25,10 @@ namespace FauFau.Formats
         private uint memoryVersion = 1002;
         private int numThreads = Environment.ProcessorCount;
 
+        // 7 for 1297, 12 for later builds, writing only supports memory version 1002
+        public uint FileVersion => fileVersion;
+        public uint MemoryVersion => memoryVersion;
+
         private Dictionary<(ulong, int), byte[]> uniqueEntries1000 = new ();
         private Dictionary<uint, byte[]> uniqueEntries1002 = new ();
 

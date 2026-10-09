@@ -105,6 +105,8 @@ namespace FauFau.Tests
 
             read.Patch.ShouldBe("test-1962");
             read.Flags.ShouldBe(HeaderFlags.ObfuscatedPool);
+            read.FileVersion.ShouldBe(12U);
+            read.MemoryVersion.ShouldBe(1002U);
         }
 
         [TestMethod]
