@@ -6,7 +6,6 @@ using System.Numerics;
 using Bitter;
 using FauFau.Formats.GtChunk;
 using FauFau.Util;
-using SharpCompress.Compressors.LZMA;
 
 namespace FauFau.Formats
 {
@@ -393,13 +392,14 @@ namespace FauFau.Formats
 
             public byte[] Decompress()
             {
+                if (IsLzma)
+                    return Lzma.Decompress(Properties, CompressedData, 0, CompressedData.Length, UncompressedSize);
+
                 var decompressed = new byte[UncompressedSize];
                 if (UncompressedSize == 0)
                     return decompressed;
 
-                using Stream stream = IsLzma
-                    ? LzmaStream.Create(Properties, new MemoryStream(CompressedData))
-                    : new ZLibStream(new MemoryStream(CompressedData), CompressionMode.Decompress);
+                using Stream stream = new ZLibStream(new MemoryStream(CompressedData), CompressionMode.Decompress);
                 stream.ReadAtLeast(decompressed, decompressed.Length, false);
                 return decompressed;
             }
