@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Bitter;
 using FauFau.Formats;
@@ -41,6 +42,29 @@ namespace FauFau.Tests
             zone.Name.ShouldBe("New Eden");
             zone.Root.Id.ShouldBe(Zone.RootLayerId);
             stream.ByteOffset.ShouldBe(stream.Length);
+        }
+
+        [TestMethod]
+        public void GetChunks_RefAndRef2_TakeCubeFaceOfTheirRange()
+        {
+            byte[] range = WorldLayersTests.Layer(Zone.ChunkRangeLayerId, UInts(2, 10, 20, 30, 40));
+            byte[] reference = WorldLayersTests.Layer(Zone.ChunkRefLayerId, UInts(12, 34, 99));
+            byte[] reference2 = WorldLayersTests.Layer(Zone.ChunkRef2LayerId, UInts(13, 35));
+            byte[] chunkInfo = WorldLayersTests.Layer(Zone.ChunkInfoLayerId, range.Concat(reference).Concat(reference2).ToArray());
+            Zone zone = new Zone { Root = GtLayer.Read(new BinaryStream(new MemoryStream(WorldLayersTests.Layer(Zone.RootLayerId, chunkInfo)))) };
+
+            var chunks = zone.GetChunks();
+
+            chunks.Count.ShouldBe(2);
+            chunks[0].FileName.ShouldBe("2_0012_0034.gtchunk");
+            chunks[0].ChunkRecordId.ShouldBe(99U);
+            chunks[1].FileName.ShouldBe("2_0013_0035.gtchunk");
+            chunks[1].ChunkRecordId.ShouldBe(0U);
+        }
+
+        private static byte[] UInts(params uint[] values)
+        {
+            return values.SelectMany(BitConverter.GetBytes).ToArray();
         }
     }
 }

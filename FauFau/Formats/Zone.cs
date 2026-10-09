@@ -1,6 +1,5 @@
 using Bitter;
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 
 namespace FauFau.Formats
@@ -11,6 +10,7 @@ namespace FauFau.Formats
         public const uint ChunkInfoLayerId = 0x20400;
         public const uint ChunkRangeLayerId = 0x10000;
         public const uint ChunkRefLayerId = 0x10101;
+        public const uint ChunkRef2LayerId = 0x10100;
 
         public string Magic = "ZONE";
         public int Version = 8;
@@ -39,6 +39,23 @@ namespace FauFau.Formats
             Root = bs.ByteOffset < bs.Length ? GtLayer.Read(bs) : null;
         }
 
+        // The chunk coordinates the zone covers, usually one range on one cube face
+        public List<ZoneChunkRange> GetChunkRanges()
+        {
+            List<ZoneChunkRange> ranges = new ();
+            GtLayer chunkInfo = Root?.Find(ChunkInfoLayerId);
+            if (chunkInfo == null)
+            {
+                return ranges;
+            }
+
+            foreach (GtLayer range in chunkInfo.FindAll(ChunkRangeLayerId))
+            {
+                ranges.Add(ZoneChunkRange.Read(range.Data));
+            }
+            return ranges;
+        }
+
         // The terrain chunks of the zone, the files are in maps/chunks
         public List<ChunkRef> GetChunks()
         {
@@ -49,33 +66,23 @@ namespace FauFau.Formats
                 return chunks;
             }
 
-            List<uint[]> ranges = new ();
-            foreach (GtLayer range in chunkInfo.FindAll(ChunkRangeLayerId))
+            List<ZoneChunkRange> ranges = GetChunkRanges();
+            foreach (GtLayer reference in chunkInfo.Children)
             {
-                // Cube face, min x, max x, min y, max y
-                uint[] values = new uint[5];
-                for (int i = 0; i < values.Length; i++)
+                if (reference.Id != ChunkRefLayerId && reference.Id != ChunkRef2LayerId)
                 {
-                    values[i] = BinaryPrimitives.ReadUInt32LittleEndian(range.Data.AsSpan(i * 4));
+                    continue;
                 }
-                ranges.Add(values);
-            }
 
-            foreach (GtLayer reference in chunkInfo.FindAll(ChunkRefLayerId))
-            {
-                ChunkRef chunk = new ChunkRef
-                {
-                    X = BinaryPrimitives.ReadUInt32LittleEndian(reference.Data),
-                    Y = BinaryPrimitives.ReadUInt32LittleEndian(reference.Data.AsSpan(4)),
-                    ChunkRecordId = BinaryPrimitives.ReadUInt32LittleEndian(reference.Data.AsSpan(8)),
-                };
+                ZoneChunkRef read = ZoneChunkRef.Read(reference.Data);
+                ChunkRef chunk = new ChunkRef { X = read.X, Y = read.Y, ChunkRecordId = read.ChunkRecordId };
 
                 // The references don't store the cube face, it's the one of the range they're in
-                foreach (uint[] range in ranges)
+                foreach (ZoneChunkRange range in ranges)
                 {
-                    if (chunk.X >= range[1] && chunk.X <= range[2] && chunk.Y >= range[3] && chunk.Y <= range[4])
+                    if (range.Contains(chunk.X, chunk.Y))
                     {
-                        chunk.CubeFace = range[0];
+                        chunk.CubeFace = range.CubeFace;
                         break;
                     }
                 }
@@ -89,6 +96,7 @@ namespace FauFau.Formats
             public uint CubeFace;
             public uint X;
             public uint Y;
+            // 0 for chunks from a ChunkRef2 layer
             public uint ChunkRecordId;
 
             public string FileName => $"{CubeFace}_{X:D4}_{Y:D4}.gtchunk";
