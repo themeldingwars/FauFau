@@ -182,12 +182,17 @@ namespace FauFau.Formats
             }
         }
 
-        // Reads the unpacked data, hashing every byte once
+        // Reads the unpacked data through a small buffer, hashing every byte once
         private sealed class Reader
         {
+            // Small reads, since GZipStream throws at the cut of a cut off file and the data of that read is lost
+            private const int ReadSize = 4096;
+
             private readonly Stream stream;
             private readonly IncrementalHash hash;
-            private readonly byte[] skipBuffer = new byte[81920];
+            private readonly byte[] buffer = new byte[ReadSize];
+            private int start;
+            private int end;
             private byte[] pending = Array.Empty<byte>();
             private int pendingStart;
 
@@ -207,38 +212,51 @@ namespace FauFau.Formats
                 Position -= data.Length;
             }
 
-            public int ReadFull(Span<byte> buffer)
+            private bool Fill()
             {
-                int total = System.Math.Min(buffer.Length, pending.Length - pendingStart);
-                pending.AsSpan(pendingStart, total).CopyTo(buffer);
-                pendingStart += total;
-                int fromPending = total;
+                start = 0;
+                end = stream.Read(buffer, 0, buffer.Length);
+                hash?.AppendData(buffer.AsSpan(0, end));
+                return end > 0;
+            }
 
-                while (total < buffer.Length)
+            public int ReadFull(Span<byte> destination)
+            {
+                int total = System.Math.Min(destination.Length, pending.Length - pendingStart);
+                pending.AsSpan(pendingStart, total).CopyTo(destination);
+                pendingStart += total;
+
+                while (total < destination.Length)
                 {
-                    int read = stream.Read(buffer.Slice(total));
-                    if (read == 0)
+                    if (start == end && !Fill())
                         break;
 
-                    total += read;
+                    int count = System.Math.Min(destination.Length - total, end - start);
+                    buffer.AsSpan(start, count).CopyTo(destination.Slice(total));
+                    start += count;
+                    total += count;
                 }
 
-                hash?.AppendData(buffer.Slice(fromPending, total - fromPending));
                 Position += total;
                 return total;
             }
 
             public long Skip(long count)
             {
-                long total = 0;
+                long total = System.Math.Min(count, pending.Length - pendingStart);
+                pendingStart += (int)total;
+
                 while (total < count)
                 {
-                    int read = ReadFull(skipBuffer.AsSpan(0, (int)System.Math.Min(skipBuffer.Length, count - total)));
-                    if (read == 0)
+                    if (start == end && !Fill())
                         break;
 
-                    total += read;
+                    int skipped = (int)System.Math.Min(count - total, end - start);
+                    start += skipped;
+                    total += skipped;
                 }
+
+                Position += total;
                 return total;
             }
 
@@ -246,7 +264,7 @@ namespace FauFau.Formats
             {
                 try
                 {
-                    while (Skip(skipBuffer.Length) > 0)
+                    while (Skip(long.MaxValue) > 0)
                     {
                     }
                 }
