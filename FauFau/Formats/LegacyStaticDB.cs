@@ -229,10 +229,11 @@ namespace FauFau.Formats
         // Each byte had a byte of a Mersenne Twister seeded with the row id added, carrying one when the sum wraps
         public static void Descramble(Span<byte> data, uint seed)
         {
-            MersenneTwister random = new MersenneTwister(seed);
+            Span<uint> keys = data.Length <= 256 ? stackalloc uint[data.Length] : new uint[data.Length];
+            MersenneTwister.Fill(seed, keys);
             for (int i = 0; i < data.Length; i++)
             {
-                byte key = (byte)random.Next();
+                byte key = (byte)keys[i];
                 data[i] = key < data[i] ? (byte)(data[i] - key) : (byte)(data[i] - key - 1);
             }
         }

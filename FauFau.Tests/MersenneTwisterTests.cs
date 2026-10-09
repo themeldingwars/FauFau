@@ -65,6 +65,21 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
+        [DataRow(1)]
+        [DataRow(227)]
+        [DataRow(228)]
+        [DataRow(700)]
+        public void Fill_MatchesNext(int count)
+        {
+            uint[] expected = new MersenneTwister(0xC0FFEE).Next((uint)count);
+            uint[] values = new uint[count];
+
+            MersenneTwister.Fill(0xC0FFEE, values);
+
+            values.ShouldBe(expected);
+        }
+
+        [TestMethod]
         public void Reseed_RestartsSequence()
         {
             MersenneTwister mt = new MersenneTwister(1234);

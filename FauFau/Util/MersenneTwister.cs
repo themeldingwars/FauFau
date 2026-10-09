@@ -110,6 +110,34 @@ namespace FauFau.Util
             }
         }
 
+        // The first outputs for the seed, the same as calling Next() outputs.Length times on a new instance
+        public static void Fill(uint seed, Span<uint> outputs)
+        {
+            const int N = 624;
+            const int M = 397;
+
+            if (outputs.Length > N - M)
+            {
+                MersenneTwister mt = new MersenneTwister(seed);
+                for (int i = 0; i < outputs.Length; i++)
+                    outputs[i] = mt.Next();
+                return;
+            }
+
+            // Output k only needs state words k, k + 1 and k + M
+            Span<uint> state = stackalloc uint[N];
+            state = state.Slice(0, outputs.Length + M);
+            state[0] = seed;
+            for (int i = 1; i < state.Length; i++)
+                state[i] = 0x6C078965U * (state[i - 1] ^ (state[i - 1] >> 30)) + (uint)i;
+
+            for (int k = 0; k < outputs.Length; k++)
+            {
+                uint y = (state[k] & 0x80000000) | (state[k + 1] & 0x7FFFFFFF);
+                outputs[k] = Temper(state[k + M] ^ (y >> 1) ^ ((y & 1) != 0 ? 0x9908B0DFU : 0));
+            }
+        }
+
         private static uint Temper(uint y)
         {
             uint y1 = ((((y >> 11) ^ y) & 0xFF3A58AD) << 7) ^ (y >> 11) ^ y;
