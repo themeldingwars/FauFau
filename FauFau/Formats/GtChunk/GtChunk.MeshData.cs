@@ -36,6 +36,17 @@ namespace FauFau.Formats.GtChunk
             Read(bs);
         }
 
+        public GtChunk_MeshData()
+        {
+        }
+
+        // The data of a collision layer, without the layer header
+        public static GtChunk_MeshData Read(byte[] data)
+        {
+            using BinaryStream bs = new BinaryStream(new System.IO.MemoryStream(data, false));
+            return new GtChunk_MeshData(bs, data.Length);
+        }
+
         public void Read(BinaryStream bs)
         {
             var startPos = bs.ByteOffset;
@@ -48,6 +59,17 @@ namespace FauFau.Formats.GtChunk
             // Physics mat ids
             NumPhysicsMats     = bs.Read.Int();
             PhysicsMaterialIds = bs.Read.UIntArray(NumPhysicsMats);
+
+            // Only revision 2 has the mesh, the others are nothing but Havok data
+            if (Revision != 2)
+            {
+                Verts        = Array.Empty<Vector3[]>();
+                IndiceBlocks = Array.Empty<IndiceBlock>();
+                MatBlocks    = Array.Empty<MatBlock>();
+                MoppBlocks   = Array.Empty<MoppBlock>();
+                HavokData    = bs.Read.ByteArray((int)(NodeLength - (bs.ByteOffset - startPos)));
+                return;
+            }
 
             // Verts
             NumVertBlocks = bs.Read.Int();
