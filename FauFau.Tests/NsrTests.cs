@@ -206,6 +206,17 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
+        public void GenerateDummyFile_TimeOfDay_IsKept()
+        {
+            Nsr nsr = Nsr.GenerateDummyFile(448, 0.75);
+
+            Nsr read = RoundTrip(nsr);
+
+            read.Meta.TimeOfDay.ShouldBe(0.75);
+            BinaryPrimitives.ReadDoubleLittleEndian(read.Meta.Unk3.AsSpan(18)).ShouldBe(0.75);
+        }
+
+        [TestMethod]
         public void Read_LeavesCallerStreamOpen()
         {
             CreateSample(false).Write(out byte[] bytes);

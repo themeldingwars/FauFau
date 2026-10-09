@@ -407,6 +407,19 @@ namespace FauFau.Formats
             public ulong ZoneInstanceGuid => Unk2 != null && Unk2.Length >= 10 ? BinaryPrimitives.ReadUInt64LittleEndian(Unk2.AsSpan(2)) : 0;
             public ulong ClockSync => Unk2 != null && Unk2.Length >= 18 ? BinaryPrimitives.ReadUInt64LittleEndian(Unk2.AsSpan(10)) : 0;
 
+            // Time of day as a fraction of 24 hours, 0.5 is noon. Arcporter sets it to pick the time of a dummy replay.
+            public double TimeOfDay
+            {
+                get => Unk3 != null && Unk3.Length >= 26 ? BinaryPrimitives.ReadDoubleLittleEndian(Unk3.AsSpan(18)) : 0;
+                set
+                {
+                    if (Unk3 == null || Unk3.Length < 31)
+                        Array.Resize(ref Unk3, 31);
+
+                    BinaryPrimitives.WriteDoubleLittleEndian(Unk3.AsSpan(18), value);
+                }
+            }
+
             public MetaSection()
             {
                 Version = 4;
@@ -540,10 +553,11 @@ namespace FauFau.Formats
         }
 
 
-        public static Nsr GenerateDummyFile(int zoneId)
+        public static Nsr GenerateDummyFile(int zoneId, double timeOfDay = 0)
         {
             Nsr n = new Nsr();
             n.Meta.ZoneId = zoneId;
+            n.Meta.TimeOfDay = timeOfDay;
             n.Meta.CharacterGUID = 5068907169408127230;
             n.Index.Offsets.Add(329);
 
