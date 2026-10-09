@@ -1,6 +1,9 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using Bitter;
 using FauFau.Util;
@@ -60,12 +63,12 @@ namespace FauFau.Formats
                 MersenneTwister.Xor(Patch, data.AsSpan(start));
             }
 
-            using BinaryStream tables = new BinaryStream(new MemoryStream(data, false));
+            Reader reader = new Reader(data, ScramblerVersion != 0);
             Tables = new List<Table>(tableCount);
             foreach (int offset in tableOffsets)
             {
-                tables.ByteOffset = offset;
-                Tables.Add(ReadTable(tables));
+                reader.Position = offset;
+                Tables.Add(reader.Table());
             }
         }
 
@@ -79,151 +82,207 @@ namespace FauFau.Formats
             return Tables.Find(table => table.Name == name);
         }
 
-        private Table ReadTable(BinaryStream bs)
+        private sealed class Reader
         {
-            BinaryReader Read = bs.Read;
-            Table table = new Table { Id = Read.UInt() };
+            private readonly byte[] data;
+            private readonly bool scrambled;
+            public int Position;
 
-            byte columnCount = Read.Byte();
-            for (int i = 0; i < columnCount; i++)
+            public Reader(byte[] data, bool scrambled)
             {
-                table.Columns.Add(new Column
-                {
-                    Type = (DBType)Read.Byte(),
-                    Id = Read.UInt(),
-                    TypeName = ReadString(bs),
-                    Name = ReadString(bs),
-                    Unk1 = ReadString(bs),
-                    Offset = Read.UInt(),
-                    NullableIndex = Read.Int(),
-                });
+                this.data = data;
+                this.scrambled = scrambled;
             }
 
-            table.NumDataBytes = Read.Int();
-            table.NumDataAndNullableBytes = Read.Int();
-            table.NumNullableColumns = Read.UInt();
-            table.Name = ReadString(bs);
-            table.PrimaryKey = ReadString(bs);
-            table.SqlWhere = ReadString(bs);
-            table.SqlMore = ReadString(bs);
-            table.Unk3 = Read.UInt();
-
-            uint rowCount = Read.UInt();
-            table.Rows = new List<Row>((int)rowCount);
-            for (uint i = 0; i < rowCount; i++)
+            private ReadOnlySpan<byte> Take(int length)
             {
-                table.Rows.Add(ReadRow(bs, table));
+                if (length < 0 || length > data.Length - Position)
+                    throw new InvalidDataException($"The static database ends {length - (data.Length - Position)} bytes early");
+
+                ReadOnlySpan<byte> span = data.AsSpan(Position, length);
+                Position += length;
+                return span;
             }
-            return table;
-        }
 
-        private Row ReadRow(BinaryStream bs, Table table)
-        {
-            Row row = new Row { Id = bs.Read.UInt(), Values = new object[table.Columns.Count] };
+            private byte Byte() => Take(1)[0];
+            private ushort UShort() => BinaryPrimitives.ReadUInt16LittleEndian(Take(2));
+            private uint UInt() => BinaryPrimitives.ReadUInt32LittleEndian(Take(4));
+            private int Int() => BinaryPrimitives.ReadInt32LittleEndian(Take(4));
+            private float Float() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
+            private float Half() => (float)BinaryPrimitives.ReadHalfLittleEndian(Take(2));
 
-            // One bit per nullable column, set when the cell has a value
-            uint present = 0;
-            if (table.NumNullableColumns > 0)
+            // Read as ASCII, other bytes become '?'
+            private char Char()
             {
-                int bytes = (int)((table.NumNullableColumns + 7) / 8);
-                for (int i = 0; i < bytes; i++)
+                byte value = Byte();
+                return value < 0x80 ? (char)value : '?';
+            }
+
+            private ReadOnlySpan<byte> ToNull()
+            {
+                int length = data.AsSpan(Position).IndexOf((byte)0);
+                if (length < 0)
+                    throw new InvalidDataException("A string of the static database isn't terminated");
+
+                ReadOnlySpan<byte> text = data.AsSpan(Position, length);
+                Position += length + 1;
+                return text;
+            }
+
+            private string String() => Encoding.UTF8.GetString(ToNull());
+
+            private string Cell(uint rowId)
+            {
+                ReadOnlySpan<byte> text = ToNull();
+                if (!scrambled)
+                    return Encoding.UTF8.GetString(text);
+
+                Span<byte> plain = text.Length <= 256 ? stackalloc byte[text.Length] : new byte[text.Length];
+                text.CopyTo(plain);
+                Descramble(plain, rowId);
+                return Encoding.UTF8.GetString(plain);
+            }
+
+            private Vector2 Vector2() => new Vector2 { x = Float(), y = Float() };
+            private Vector3 Vector3() => new Vector3 { x = Float(), y = Float(), z = Float() };
+            private Vector4 Vector4() => new Vector4 { x = Float(), y = Float(), z = Float(), w = Float() };
+            private Half3 Half3() => new Half3 { x = Half(), y = Half(), z = Half() };
+
+            private List<T> List<T>(int count, Func<T> read)
+            {
+                List<T> list = new List<T>(count);
+                for (int i = 0; i < count; i++)
+                    list.Add(read());
+
+                return list;
+            }
+
+            private T[] Array<T>(int count) where T : unmanaged
+            {
+                return MemoryMarshal.Cast<byte, T>(Take(count * Unsafe.SizeOf<T>())).ToArray();
+            }
+
+            public Table Table()
+            {
+                Table table = new Table { Id = UInt() };
+
+                byte columnCount = Byte();
+                for (int i = 0; i < columnCount; i++)
                 {
-                    present |= (uint)bs.Read.Byte() << (i * 8);
+                    table.Columns.Add(new Column
+                    {
+                        Type = (DBType)Byte(),
+                        Id = UInt(),
+                        TypeName = String(),
+                        Name = String(),
+                        Unk1 = String(),
+                        Offset = UInt(),
+                        NullableIndex = Int(),
+                    });
+                }
+
+                table.NumDataBytes = Int();
+                table.NumDataAndNullableBytes = Int();
+                table.NumNullableColumns = UInt();
+                table.Name = String();
+                table.PrimaryKey = String();
+                table.SqlWhere = String();
+                table.SqlMore = String();
+                table.Unk3 = UInt();
+
+                uint rowCount = UInt();
+                table.Rows = new List<Row>((int)rowCount);
+                DBType[] types = table.Columns.ConvertAll(column => column.Type).ToArray();
+                int[] nullable = table.Columns.ConvertAll(column => column.NullableIndex).ToArray();
+                int bitfieldBytes = (int)((table.NumNullableColumns + 7) / 8);
+                for (uint i = 0; i < rowCount; i++)
+                {
+                    table.Rows.Add(Row(types, nullable, bitfieldBytes));
+                }
+                return table;
+            }
+
+            private Row Row(DBType[] types, int[] nullable, int bitfieldBytes)
+            {
+                Row row = new Row { Id = UInt(), Values = new object[types.Length] };
+
+                // One bit per nullable column, set when the cell has a value
+                uint present = 0;
+                for (int i = 0; i < bitfieldBytes; i++)
+                {
+                    present |= (uint)Byte() << (i * 8);
+                }
+
+                for (int i = 0; i < types.Length; i++)
+                {
+                    if (nullable[i] == -1 || (present & (1u << nullable[i])) != 0)
+                    {
+                        row.Values[i] = Value(types[i], row.Id);
+                    }
+                }
+                return row;
+            }
+
+            private object Value(DBType type, uint rowId)
+            {
+                switch (type)
+                {
+                    case DBType.Byte:
+                        return StaticDB.Box(Byte());
+                    case DBType.UShort:
+                        return StaticDB.Box(UShort());
+                    case DBType.UInt:
+                        return StaticDB.Box(UInt());
+                    case DBType.ULong:
+                        return BinaryPrimitives.ReadUInt64LittleEndian(Take(8));
+                    case DBType.SByte:
+                        return (sbyte)Byte();
+                    case DBType.Short:
+                        return BinaryPrimitives.ReadInt16LittleEndian(Take(2));
+                    case DBType.Int:
+                        return StaticDB.Box(Int());
+                    case DBType.Long:
+                        return BinaryPrimitives.ReadInt64LittleEndian(Take(8));
+                    case DBType.Float:
+                        return StaticDB.Box(Float());
+                    case DBType.Double:
+                        return BinaryPrimitives.ReadDoubleLittleEndian(Take(8));
+                    case DBType.Vector2:
+                        return Vector2();
+                    case DBType.Vector3:
+                        return Vector3();
+                    case DBType.Vector4:
+                        return Vector4();
+                    case DBType.Matrix4x4:
+                        return new Matrix4x4 { x = Vector4(), y = Vector4(), z = Vector4(), w = Vector4() };
+                    case DBType.Char:
+                    case DBType.AsciiChar:
+                        return Char();
+                    case DBType.Box3:
+                        return new Box3 { min = Vector3(), max = Vector3() };
+                    case DBType.HalfMatrix4x3:
+                        return new HalfMatrix4x3 { x = Half3(), y = Half3(), z = Half3(), w = Half3() };
+                    case DBType.Half:
+                        return Half();
+                    case DBType.String:
+                        return Cell(rowId);
+                    case DBType.Blob:
+                    case DBType.ByteArray:
+                        return Take(UShort()).ToArray();
+                    case DBType.UShortArray:
+                        return Array<ushort>(UShort());
+                    case DBType.UIntArray:
+                        return Array<uint>(UShort());
+                    case DBType.Vector2Array:
+                        return List(Byte(), Vector2);
+                    case DBType.Vector3Array:
+                        return List(Byte(), Vector3);
+                    case DBType.Vector4Array:
+                        return List(Byte(), Vector4);
+                    default:
+                        throw new InvalidDataException($"Unknown column type {(byte)type}");
                 }
             }
-
-            for (int i = 0; i < table.Columns.Count; i++)
-            {
-                Column column = table.Columns[i];
-                if (column.NullableIndex == -1 || (present & (1u << column.NullableIndex)) != 0)
-                {
-                    row.Values[i] = ReadValue(bs, column.Type, row.Id);
-                }
-            }
-            return row;
-        }
-
-        private object ReadValue(BinaryStream bs, DBType type, uint rowId)
-        {
-            BinaryReader Read = bs.Read;
-            switch (type)
-            {
-                case DBType.Byte:
-                    return Read.Byte();
-                case DBType.UShort:
-                    return Read.UShort();
-                case DBType.UInt:
-                    return Read.UInt();
-                case DBType.ULong:
-                    return Read.ULong();
-                case DBType.SByte:
-                    return Read.SByte();
-                case DBType.Short:
-                    return Read.Short();
-                case DBType.Int:
-                    return Read.Int();
-                case DBType.Long:
-                    return Read.Long();
-                case DBType.Float:
-                    return Read.Float();
-                case DBType.Double:
-                    return Read.Double();
-                case DBType.Vector2:
-                    return Read.Type<Vector2>();
-                case DBType.Vector3:
-                    return Read.Type<Vector3>();
-                case DBType.Vector4:
-                    return Read.Type<Vector4>();
-                case DBType.Matrix4x4:
-                    return Read.Type<Matrix4x4>();
-                case DBType.Char:
-                    return Read.Char();
-                case DBType.Box3:
-                    return Read.Type<Box3>();
-                case DBType.AsciiChar:
-                    return Read.Char(BinaryStream.TextEncoding.ASCII);
-                case DBType.HalfMatrix4x3:
-                    return Read.Type<HalfMatrix4x3>();
-                case DBType.Half:
-                    return Read.Half();
-                case DBType.String:
-                    return ScramblerVersion == 0 ? ReadString(bs) : ReadScrambledString(bs, rowId);
-                case DBType.Blob:
-                case DBType.ByteArray:
-                    return Read.ByteArray(Read.UShort());
-                case DBType.UShortArray:
-                    return Read.UShortArray(Read.UShort());
-                case DBType.UIntArray:
-                    return Read.UIntArray(Read.UShort());
-                case DBType.Vector2Array:
-                    return Read.TypeList<Vector2>(Read.Byte());
-                case DBType.Vector3Array:
-                    return Read.TypeList<Vector3>(Read.Byte());
-                case DBType.Vector4Array:
-                    return Read.TypeList<Vector4>(Read.Byte());
-                default:
-                    throw new InvalidDataException($"Unknown column type {(byte)type}");
-            }
-        }
-
-        private static byte[] ReadToNull(BinaryStream bs)
-        {
-            List<byte> bytes = new List<byte>(64);
-            byte value;
-            while ((value = bs.Read.Byte()) != 0)
-            {
-                bytes.Add(value);
-            }
-            return bytes.ToArray();
-        }
-
-        private static string ReadString(BinaryStream bs) => Encoding.UTF8.GetString(ReadToNull(bs));
-
-        private static string ReadScrambledString(BinaryStream bs, uint rowId)
-        {
-            byte[] bytes = ReadToNull(bs);
-            Descramble(bytes, rowId);
-            return Encoding.UTF8.GetString(bytes);
         }
 
         // Each byte had a byte of a Mersenne Twister seeded with the row id added, carrying one when the sum wraps

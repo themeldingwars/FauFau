@@ -387,11 +387,12 @@ namespace FauFau.Formats
             return boxes;
         }
 
-        private static object Box(uint value) => value < BoxCacheSize ? boxedUInts[value] : value;
-        private static object Box(ushort value) => value < BoxCacheSize ? boxedUShorts[value] : value;
-        private static object Box(int value) => (uint)value < BoxCacheSize ? boxedInts[value] : value;
+        internal static object Box(byte value) => boxedBytes[value];
+        internal static object Box(uint value) => value < BoxCacheSize ? boxedUInts[value] : value;
+        internal static object Box(ushort value) => value < BoxCacheSize ? boxedUShorts[value] : value;
+        internal static object Box(int value) => (uint)value < BoxCacheSize ? boxedInts[value] : value;
 
-        private static object Box(float value)
+        internal static object Box(float value)
         {
             // Compare the bits, so -0 keeps its sign
             int bits = BitConverter.SingleToInt32Bits(value);
