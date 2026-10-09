@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 using FauFau.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -30,6 +31,16 @@ namespace FauFau.Tests
             uint bytesHash = Checksum.FFnv32(Encoding.ASCII.GetBytes(input));
 
             stringHash.ShouldBe(bytesHash);
+        }
+
+        [TestMethod]
+        public void FFnv32_Span_MatchesString()
+        {
+            byte[] padded = Encoding.ASCII.GetBytes("xxdbitems::RootItemxx");
+
+            uint spanHash = Checksum.FFnv32(padded.AsSpan(2, padded.Length - 4));
+
+            spanHash.ShouldBe(Checksum.FFnv32("dbitems::RootItem"));
         }
 
         [TestMethod]

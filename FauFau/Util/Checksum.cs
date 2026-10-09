@@ -11,12 +11,17 @@ namespace FauFau.Util
         }
         public static uint FFnv32(byte[] array)
         {
+            return FFnv32((ReadOnlySpan<byte>)array);
+        }
+
+        public static uint FFnv32(ReadOnlySpan<byte> data)
+        {
             unchecked
             {
                 uint hash = 0x811C9DC5U;
-                for (var i = 0; i < array.Length; i++)
+                for (var i = 0; i < data.Length; i++)
                 {
-                    hash = 0x1000193U * (hash ^ array[i]);
+                    hash = 0x1000193U * (hash ^ data[i]);
                 }
                 hash = 9U * (8193U * hash ^ ((8193U * hash) >> 7));
                 return 33U * (hash ^ (hash >> 17));
