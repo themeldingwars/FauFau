@@ -41,6 +41,45 @@ namespace FauFau.Formats
             return FromData(id, data);
         }
 
+        // Layers back to back, with or without marker, like in the decompressed blocks of a chunk
+        public static List<GtLayer> ReadList(byte[] data)
+        {
+            List<GtLayer> layers = new ();
+            int position = 0;
+            while (position < data.Length)
+            {
+                if (data.Length - position < 8)
+                {
+                    throw new InvalidDataException($"Layer header at {position} is cut off");
+                }
+
+                ulong first = BinaryPrimitives.ReadUInt64LittleEndian(data.AsSpan(position));
+                uint id = (uint)first;
+                uint length = (uint)(first >> 32);
+                position += 8;
+                if (first == Marker)
+                {
+                    if (data.Length - position < 8)
+                    {
+                        throw new InvalidDataException($"Layer header at {position - 8} is cut off");
+                    }
+
+                    id = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position));
+                    length = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position + 4));
+                    position += 8;
+                }
+
+                if (data.Length - position < length)
+                {
+                    throw new InvalidDataException($"Layer 0x{id:X} is cut off");
+                }
+
+                layers.Add(FromData(id, data.AsSpan(position, (int)length).ToArray()));
+                position += (int)length;
+            }
+            return layers;
+        }
+
         private static GtLayer FromData(uint id, byte[] data)
         {
             GtLayer layer = new GtLayer { Id = id };

@@ -76,6 +76,17 @@ namespace FauFau.Formats
             return decompressedData;
         }
 
+        // The layers of the data a LOD shares between its sub chunks
+        public List<GtLayer> GetLodLayers(int lodLevel)
+        {
+            return GtLayer.ReadList(DataBlocks[lodLevel].Decompress());
+        }
+
+        public List<GtLayer> GetSubChunkLayers(int subChunkIdx)
+        {
+            return GtLayer.ReadList(DatBlocks[subChunkIdx].Decompress());
+        }
+
         public List<NodeDataWrapper> GetSubChunkNodes(int subChunkIdx)
         {
             var nodes = new List<NodeDataWrapper>();
