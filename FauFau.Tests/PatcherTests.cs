@@ -97,6 +97,34 @@ namespace FauFau.Tests
         }
 
         [TestMethod]
+        public void RedHandedBypass_IsApplied_OnlyAfterApply()
+        {
+            Patcher patcher = CreatePatcher(Filler(4), RedHanded1, Filler(4), RedHanded2, Filler(4), RedHanded3, Filler(4));
+            RedHandedBypass patch = new RedHandedBypass();
+
+            bool before = patch.IsApplied(patcher);
+            patcher.ApplyPatch(patch);
+            bool after = patch.IsApplied(patcher);
+
+            before.ShouldBeFalse();
+            after.ShouldBeTrue();
+        }
+
+        [TestMethod]
+        public void UnlimitedFreeCamRadius_IsApplied_OnlyAfterApply()
+        {
+            Patcher patcher = CreatePatcher(Encoding.ASCII.GetBytes("speccam.freefly.addRadius"), Filler(3), Encoding.ASCII.GetBytes("50\0\0\0\0\0\0"));
+            UnlimitedFreeCamRadius patch = new UnlimitedFreeCamRadius();
+
+            bool before = patch.IsApplied(patcher);
+            patcher.ApplyPatch(patch);
+            bool after = patch.IsApplied(patcher);
+
+            before.ShouldBeFalse();
+            after.ShouldBeTrue();
+        }
+
+        [TestMethod]
         public void Patches_MissingPattern_FailWithoutChangingData()
         {
             Patcher patcher = CreatePatcher(Filler(4), RedHanded1, Filler(4), RedHanded2, Filler(64));

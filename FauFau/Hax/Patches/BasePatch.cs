@@ -1,4 +1,4 @@
-﻿namespace FauFau.Hax.Patches
+namespace FauFau.Hax.Patches
 {
     public abstract class BasePatch
     {
@@ -9,6 +9,12 @@
         public virtual PatchResult Apply(Patcher Patchy)
         {
             return new PatchResult() { Success = false, Message = "NA" };
+        }
+
+        // Whether the file already has this patch, false if the patch can't tell
+        public virtual bool IsApplied(Patcher Patchy)
+        {
+            return false;
         }
     }
 }

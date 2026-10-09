@@ -1,4 +1,6 @@
-﻿namespace FauFau.Hax.Patches
+using System;
+
+namespace FauFau.Hax.Patches
 {
     public class UnlimitedFreeCamRadius : BasePatch
     {
@@ -25,6 +27,14 @@
             };
 
             return result;
+        }
+
+        public override bool IsApplied(Patcher Patchy)
+        {
+            var offset = Patchy.GetSimpleOffset(Pattern);
+            var start  = offset + Pattern.Length + 3;
+            return offset >= 0 && start + PatchData.Length <= Patchy.FileData.Length &&
+                   Patchy.FileData.AsSpan((int)start, PatchData.Length).SequenceEqual(PatchData);
         }
     }
 }
