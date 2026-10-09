@@ -11,7 +11,7 @@
     <PackageProjectUrl>https://github.com/themeldingwars/FauFau</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageTags>firefall;mmo;protocol;file-format;matrix;sdb</PackageTags>
+    <PackageTags>firefall;mmo;protocol;file-format;sdb;nsr</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
