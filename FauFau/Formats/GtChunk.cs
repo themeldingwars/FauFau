@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -12,10 +12,9 @@ namespace FauFau.Formats
     // Codes not the most optimised atm so TODO: revisit
     public class GtChunkV8 : BinaryWrapper
     {
-        public const int   VERSION     = 8;
-        public const ulong NODE_MARKER = 0x12ED5A12ED5B12ED;
+        public const int VERSION = 8;
 
-        public RootNode         Root;
+        public RootLayer        Root;
         public Block[]          DataBlocks;
         public Block[]          DatBlocks;
         public LodDataMapping[] LodDataMap;
@@ -28,20 +27,20 @@ namespace FauFau.Formats
             Read(bs);
         }
 
-        // Check if the node id and version match
+        // Check if the layer marker and version match
         public bool CheckIsValid(BinaryStream bs)
         {
-            var node = new Node();
-            node.Read(bs);
+            var header = new LayerHeader();
+            header.Read(bs);
             var version = bs.Read.UInt();
 
-            var isValid = node.NodeMarker == NODE_MARKER && version == VERSION;
+            var isValid = header.Marker == GtLayer.Marker && version == VERSION;
             return isValid;
         }
 
         public override void Read(BinaryStream bs)
         {
-            Root = new RootNode();
+            Root = new RootLayer();
             Root.Read(bs);
 
             LoadCompressedBlocks(bs);
@@ -49,7 +48,7 @@ namespace FauFau.Formats
 
         public LodSubChunkData GetDecompressedLod(int lodLevel)
         {
-            var lod     = Root.LodNodes[lodLevel];
+            var lod     = Root.LodLayers[lodLevel];
             var lodData = LodDataMap[lodLevel];
 
             var lodDecompressed = new LodSubChunkData()
@@ -88,15 +87,15 @@ namespace FauFau.Formats
         // load the compressed chunks into memory, doesn't decompress them
         private void LoadCompressedBlocks(BinaryStream bs)
         {
-            // The block offsets are relative to the end of the root node
-            long dataStart = Node.HeaderLength + Root.Length;
+            // The block offsets are relative to the end of the root layer
+            long dataStart = LayerHeader.HeaderLength + Root.Length;
 
             List<Block> datBlocks           = new List<Block>(100);
             List<short> datBlockLodMappings = new List<short>(100);
             DataBlocks = new Block[Root.NumLods];
             LodDataMap = new LodDataMapping[Root.NumLods];
             for (int i = 0; i < DataBlocks.Length; i++) {
-                var lod = Root.LodNodes[i];
+                var lod = Root.LodLayers[i];
                 LodDataMap[i].DataBlockIdx = i;
 
                 bs.ByteOffset = dataStart + lod.DataOffset;
@@ -109,7 +108,7 @@ namespace FauFau.Formats
 
                 datBlockLodMappings.Clear();
                 for (int j = 0; j < lod.NumSubchunks; j++) {
-                    var subChunk = lod.SubChunkNodes[j];
+                    var subChunk = lod.SubChunkLayers[j];
                     datBlockLodMappings.Add((short) datBlocks.Count);
 
                     bs.ByteOffset = dataStart + subChunk.DataOffset;
@@ -127,38 +126,7 @@ namespace FauFau.Formats
             DatBlocks = datBlocks.ToArray();
         }
 
-        private Node ReadNodeHeader(BinaryStream bs)
-        {
-            var nodeHeader = new Node(bs);
-            return nodeHeader;
-        }
-
     #region Types
-
-        public enum NodeTypes : int
-        {
-            // Structure nodes
-            Root     = 262144,
-            LOD      = 262145,
-            SubChunk = 262146,
-
-            // Compressed block nodes
-            TerrainChunk             = 262400,
-            StaticGeometryCollision  = 262401,
-            SubZoneGrid              = 262402,
-            MovementBlockerCollision = 262403,
-            EncounterNameRegistry2   = 262404,
-            WaterCollision           = 262405,
-            PropChunk                = 262656,
-            GeometryTree2            = 262659,
-            PropEncNameReg           = 262660,
-            VegetationChunk          = 262661,
-            OverlayChunk             = 262662,
-            SectorsChunk             = 262663,
-            WaterObjectChunk         = 262664,
-            VegetationChunk2         = 262665,
-            GeometryTree             = 262672,
-        }
 
         // Mapp an lod idx to compressed blocks
         public struct LodDataMapping
@@ -174,47 +142,37 @@ namespace FauFau.Formats
             public byte[][] SubChunkData;
         }
 
-        public class Node : ReadWrite
+        // The header of the root, LOD and sub chunk layers, the chunk files always write the marker
+        public class LayerHeader : ReadWrite
         {
             public const int HeaderLength = 16;
 
-            public ulong NodeMarker;
-            public uint  NodeId;
+            public ulong Marker;
+            public uint  Id;
             public int   Length;
-
-            public NodeTypes NodeType => (NodeTypes) NodeId;
-
-            public Node(BinaryStream bs)
-            {
-                Read(bs);
-            }
-
-            public Node()
-            {
-            }
 
             public virtual void Read(BinaryStream bs)
             {
-                NodeMarker = bs.Read.ULong();
-                NodeId     = bs.Read.UInt();
-                Length     = bs.Read.Int();
+                Marker = bs.Read.ULong();
+                Id     = bs.Read.UInt();
+                Length = bs.Read.Int();
             }
 
             public virtual void Write(BinaryStream bs)
             {
-                bs.Write.ULong(NODE_MARKER);
-                bs.Write.UInt(NodeId);
+                bs.Write.ULong(GtLayer.Marker);
+                bs.Write.UInt(Id);
                 bs.Write.Int(Length);
             }
         }
 
-        public class RootNode : Node
+        public class RootLayer : LayerHeader
         {
             public uint  Version;
             public ulong Timestamp;
             public uint  NumLods;
 
-            public LodNode[] LodNodes;
+            public LodLayer[] LodLayers;
 
             public DateTime TimeStamp => Util.Time.DateTimeFromUnixTimestampMilliseconds((long)Timestamp);
 
@@ -225,11 +183,11 @@ namespace FauFau.Formats
                 Timestamp = bs.Read.ULong();
                 NumLods   = bs.Read.UInt();
 
-                LodNodes = new LodNode[NumLods];
+                LodLayers = new LodLayer[NumLods];
                 for (int i = 0; i < NumLods; i++) {
-                    var lodNode = new LodNode();
-                    lodNode.Read(bs);
-                    LodNodes[i] = lodNode;
+                    var lod = new LodLayer();
+                    lod.Read(bs);
+                    LodLayers[i] = lod;
                 }
             }
 
@@ -241,12 +199,12 @@ namespace FauFau.Formats
                 bs.Write.UInt(NumLods);
 
                 for (int i = 0; i < NumLods; i++) {
-                    LodNodes[i].Write(bs);
+                    LodLayers[i].Write(bs);
                 }
             }
         }
 
-        public class LodNode : Node
+        public class LodLayer : LayerHeader
         {
             public uint LodIdx;
             public uint NumSubchunks;
@@ -254,7 +212,7 @@ namespace FauFau.Formats
             public int  CompressedSize;
             public int  UncompressedSize;
 
-            public SubChunkNode[] SubChunkNodes;
+            public SubChunkLayer[] SubChunkLayers;
 
             public override void Read(BinaryStream bs)
             {
@@ -266,11 +224,11 @@ namespace FauFau.Formats
                 UncompressedSize = bs.Read.Int();
 
                 // The chunks
-                SubChunkNodes = new SubChunkNode[NumSubchunks];
+                SubChunkLayers = new SubChunkLayer[NumSubchunks];
                 for (int i = 0; i < NumSubchunks; i++) {
-                    var subChunk = new SubChunkNode();
+                    var subChunk = new SubChunkLayer();
                     subChunk.Read(bs);
-                    SubChunkNodes[i] = subChunk;
+                    SubChunkLayers[i] = subChunk;
                 }
             }
 
@@ -285,12 +243,12 @@ namespace FauFau.Formats
                 bs.Write.Int(UncompressedSize);
 
                 for (int i = 0; i < NumSubchunks; i++) {
-                    SubChunkNodes[i].Write(bs);
+                    SubChunkLayers[i].Write(bs);
                 }
             }
         }
 
-        public class SubChunkNode : Node
+        public class SubChunkLayer : LayerHeader
         {
             public uint    DataOffset;
             public int     CompressedSize;
