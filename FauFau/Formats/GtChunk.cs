@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -78,12 +78,12 @@ namespace FauFau.Formats
         // The layers of the data a LOD shares between its sub chunks
         public List<GtLayer> GetLodLayers(int lodLevel)
         {
-            return GtLayer.ReadList(DataBlocks[lodLevel].Decompress());
+            return GtLayer.ReadList(DataBlocks[lodLevel].Decompress(), WorldLayerIds.Lod);
         }
 
         public List<GtLayer> GetSubChunkLayers(int subChunkIdx)
         {
-            return GtLayer.ReadList(DatBlocks[subChunkIdx].Decompress());
+            return GtLayer.ReadList(DatBlocks[subChunkIdx].Decompress(), WorldLayerIds.SubChunk);
         }
 
         public List<NodeDataWrapper> GetSubChunkNodes(int subChunkIdx)

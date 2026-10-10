@@ -8,15 +8,21 @@ namespace FauFau.Formats
     {
         public const uint EnvironmentLayerId = 0x50001;
 
-        public GtLayer Environment;
+        public GtContainerLayer Environment;
 
         public override void Read(BinaryStream bs)
         {
-            Environment = GtLayer.Read(bs);
-            if (Environment.Id != EnvironmentLayerId)
+            GtLayer layer = GtLayer.Read(bs);
+            if (layer.Id != EnvironmentLayerId || layer is not GtContainerLayer environment)
             {
-                throw new InvalidDataException($"Expected the environment layer, got layer 0x{Environment.Id:X}");
+                throw new InvalidDataException($"Expected the environment layer, got layer 0x{layer.Id:X}");
             }
+            Environment = environment;
+        }
+
+        public override void Write(BinaryStream bs)
+        {
+            Environment.Write(bs);
         }
     }
 }

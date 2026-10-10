@@ -51,7 +51,7 @@ namespace FauFau.Tests
             byte[] reference = WorldLayersTests.Layer(Zone.ChunkRefLayerId, UInts(12, 34, 99));
             byte[] reference2 = WorldLayersTests.Layer(Zone.ChunkRef2LayerId, UInts(13, 35));
             byte[] chunkInfo = WorldLayersTests.Layer(Zone.ChunkInfoLayerId, range.Concat(reference).Concat(reference2).ToArray());
-            Zone zone = new Zone { Root = GtLayer.Read(new BinaryStream(new MemoryStream(WorldLayersTests.Layer(Zone.RootLayerId, chunkInfo)))) };
+            Zone zone = new Zone { Root = (GtContainerLayer)GtLayer.Read(new BinaryStream(new MemoryStream(WorldLayersTests.Layer(Zone.RootLayerId, chunkInfo)))) };
 
             var chunks = zone.GetChunks();
 
@@ -60,6 +60,23 @@ namespace FauFau.Tests
             chunks[0].ChunkRecordId.ShouldBe(99U);
             chunks[1].FileName.ShouldBe("2_0013_0035.gtchunk");
             chunks[1].ChunkRecordId.ShouldBe(0U);
+        }
+
+        [TestMethod]
+        public void Write_ReadZone_WritesSameBytes()
+        {
+            BinaryStream stream = CreateHeader("New Eden");
+            byte[] bytes = stream.Read.ByteArray((int)stream.Length);
+            stream.ByteOffset = 0;
+            Zone zone = new Zone();
+            zone.Read(stream);
+            BinaryStream written = new BinaryStream(new MemoryStream());
+
+            zone.Write(written);
+            written.ByteOffset = 0;
+            byte[] result = written.Read.ByteArray((int)written.Length);
+
+            result.ShouldBe(bytes);
         }
 
         private static byte[] UInts(params uint[] values)

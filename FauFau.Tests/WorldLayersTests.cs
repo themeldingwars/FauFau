@@ -13,7 +13,7 @@ namespace FauFau.Tests
     [TestClass]
     public class WorldLayersTests
     {
-        private static byte[] Bytes(params object[] values)
+        internal static byte[] Bytes(params object[] values)
         {
             using MemoryStream stream = new MemoryStream();
             using (System.IO.BinaryWriter writer = new System.IO.BinaryWriter(stream, Encoding.UTF8, true))
@@ -24,6 +24,12 @@ namespace FauFau.Tests
                     {
                         case uint u:
                             writer.Write(u);
+                            break;
+                        case ushort u:
+                            writer.Write(u);
+                            break;
+                        case byte b:
+                            writer.Write(b);
                             break;
                         case float f:
                             writer.Write(f);
@@ -54,19 +60,31 @@ namespace FauFau.Tests
             return stream.Read.ByteArray((int)stream.Length);
         }
 
+        private static T Read<T>(uint parentId, uint id, byte[] data) where T : GtLayer
+        {
+            return GtLayer.ReadList(Layer(id, data), parentId).Single().ShouldBeOfType<T>();
+        }
+
         [TestMethod]
         public void ZoneBounds_ReadsMinAndMax()
         {
-            ZoneBounds bounds = ZoneBounds.Read(Bytes(1f, 2f, 3f, 4f, 5f, 6f));
+            byte[] data = Bytes(1f, 2f, 3f, 4f, 5f, 6f);
+
+            ZoneBoundsLayer bounds = Read<ZoneBoundsLayer>(WorldLayerIds.ZoneRoot, WorldLayerIds.Bounds, data);
+            byte[] written = bounds.GetData();
 
             bounds.Min.ShouldBe(new Vector3(1, 2, 3));
             bounds.Max.ShouldBe(new Vector3(4, 5, 6));
+            written.ShouldBe(data);
         }
 
         [TestMethod]
         public void ZoneChunkRange_ReadsXBeforeY()
         {
-            ZoneChunkRange range = ZoneChunkRange.Read(Bytes(2u, 10u, 20u, 30u, 40u));
+            byte[] data = Bytes(2u, 10u, 20u, 30u, 40u);
+
+            ZoneChunkRangeLayer range = Read<ZoneChunkRangeLayer>(WorldLayerIds.ChunkInfo, WorldLayerIds.ChunkRange, data);
+            byte[] written = range.GetData();
 
             range.CubeFace.ShouldBe(2U);
             range.MinX.ShouldBe(10U);
@@ -75,16 +93,21 @@ namespace FauFau.Tests
             range.MaxY.ShouldBe(40U);
             range.Contains(15, 35).ShouldBeTrue();
             range.Contains(35, 15).ShouldBeFalse();
+            written.ShouldBe(data);
         }
 
         [TestMethod]
-        public void ZoneChunkRef_WithoutRecordId_IsZero()
+        public void ZoneChunkRef2_HasNoRecordId()
         {
-            ZoneChunkRef reference = ZoneChunkRef.Read(Bytes(7u, 8u));
+            byte[] data = Bytes(7u, 8u);
+
+            ZoneChunkRefLayer reference = Read<ZoneChunkRefLayer>(WorldLayerIds.ChunkInfo, WorldLayerIds.ChunkRef2, data);
+            byte[] written = reference.GetData();
 
             reference.X.ShouldBe(7U);
             reference.Y.ShouldBe(8U);
-            reference.ChunkRecordId.ShouldBe(0U);
+            reference.HasChunkRecordId.ShouldBeFalse();
+            written.ShouldBe(data);
         }
 
         [TestMethod]
@@ -92,7 +115,8 @@ namespace FauFau.Tests
         {
             byte[] data = Bytes(11u, 12u, 2u, 1f, 2f, 3f, 0f, 0f, 0f, 1f, 2u, new byte[] { 9, 8 }, 4f, 5f, 6f, 0f, 0f, 1f, 0f, 0u);
 
-            ZonePath path = ZonePath.Read(data);
+            ZonePathLayer path = Read<ZonePathLayer>(WorldLayerIds.ZoneRoot, WorldLayerIds.Path, data);
+            byte[] written = path.GetData();
 
             path.CceId.ShouldBe(11U);
             path.Steps.Count.ShouldBe(2);
@@ -100,23 +124,26 @@ namespace FauFau.Tests
             path.Steps[0].Action.ShouldBe(new byte[] { 9, 8 });
             path.Steps[1].Orientation.ShouldBe(new Vector4(0, 0, 1, 0));
             path.Steps[1].Action.ShouldBeEmpty();
+            written.ShouldBe(data);
         }
 
         [TestMethod]
-        [DataRow(false)]
-        [DataRow(true)]
-        public void MeldingPerimeter_ReadsOptionalLastByte(bool withByte)
+        [DataRow(0)]
+        [DataRow(1)]
+        [DataRow(9)]
+        public void MeldingPerimeter_ReadsOptionalEnd(int end)
         {
-            byte[] data = Bytes("Perimeter", 3u, 10u, new byte[] { 0xFF, 0x03 }, 4u, 2u, "a", "bc");
-            if (withByte)
-                data = data.Append((byte)7).ToArray();
+            byte[] data = Bytes("Perimeter", 3u, 10u, new byte[] { 0xFF, 0x03 }, 4u, 2u, "a", "bc", Bytes((byte)7, 0f, 120f).Take(end).ToArray());
 
-            MeldingPerimeter perimeter = MeldingPerimeter.Read(data);
+            MeldingPerimeterLayer perimeter = Read<MeldingPerimeterLayer>(WorldLayerIds.Melding, WorldLayerIds.MeldingPerimeter, data);
+            byte[] written = perimeter.GetData();
 
             perimeter.Name.ShouldBe("Perimeter");
             perimeter.Bitfield.ShouldBe(new byte[] { 0xFF, 0x03 });
             perimeter.Perimeters.ShouldBe(new[] { "a", "bc" });
-            perimeter.Unk2.ShouldBe(withByte ? (byte?)7 : null);
+            perimeter.Unk2.ShouldBe(end > 0 ? (byte?)7 : null);
+            perimeter.Unk4.ShouldBe(end > 1 ? 120f : null);
+            written.ShouldBe(data);
         }
 
         [TestMethod]
@@ -124,20 +151,24 @@ namespace FauFau.Tests
         {
             byte[] data = Bytes(10540u, 640f, -448f, 4u, 3u, 8f, 2u, new byte[] { 0xFF, 0x0F });
 
-            SubZoneRegion region = SubZoneRegion.Read(data);
+            SubZoneRegionLayer region = Read<SubZoneRegionLayer>(WorldLayerIds.ZoneRoot, WorldLayerIds.SubZoneRegion, data);
+            byte[] written = region.GetData();
 
             region.Origin.ShouldBe(new Vector2(640, -448));
             region.Width.ShouldBe(4U);
             region.CellSize.ShouldBe(8f);
             region.Bitmap.ShouldBe(new byte[] { 0xFF, 0x0F });
+            written.ShouldBe(data);
         }
 
         [TestMethod]
-        public void SubZoneRegion_WrongBitmapSize_Throws()
+        public void SubZoneRegion_WrongBitmapSize_StaysData()
         {
             byte[] data = Bytes(1u, 0f, 0f, 4u, 4u, 8f, 3u, new byte[3]);
 
-            Should.Throw<InvalidDataException>(() => SubZoneRegion.Read(data));
+            GtDataLayer layer = Read<GtDataLayer>(WorldLayerIds.ZoneRoot, WorldLayerIds.SubZoneRegion, data);
+
+            layer.Data.ShouldBe(data);
         }
 
         [TestMethod]
@@ -145,45 +176,64 @@ namespace FauFau.Tests
         {
             byte[] data = Bytes(0u, 2u, 2u, 100u, 200u, 1u, new byte[] { 0, 1, 1, 0 });
 
-            SubZoneGrid grid = SubZoneGrid.Read(data);
+            SubZoneGridLayer grid = Read<SubZoneGridLayer>(WorldLayerIds.SubChunk, WorldLayerIds.SubZoneGrid, data);
+            byte[] written = grid.GetData();
 
             grid.SubZoneIds.ShouldBe(new[] { 100U, 200U });
             grid.Grid.ShouldBe(new byte[] { 0, 1, 1, 0 });
+            written.ShouldBe(data);
         }
 
         [TestMethod]
-        public void EncounterNameRegistry_ReadsNames()
+        [DataRow(WorldLayerIds.ZoneRoot, WorldLayerIds.PropEncounterNameRegistry)]
+        [DataRow(WorldLayerIds.Lod, WorldLayerIds.ChunkEncounterNameRegistry)]
+        [DataRow(WorldLayerIds.SubChunk, WorldLayerIds.ChunkPropEncounterNameRegistry)]
+        public void EncounterNameRegistry_ReadsNames(uint parentId, uint id)
         {
-            EncounterNameRegistry registry = EncounterNameRegistry.Read(Bytes(2u, "chosen", "thumper"));
+            byte[] data = Bytes(2u, "chosen", "thumper");
+
+            EncounterNameRegistryLayer registry = Read<EncounterNameRegistryLayer>(parentId, id, data);
+            byte[] written = registry.GetData();
 
             registry.Names.ShouldBe(new[] { "chosen", "thumper" });
+            written.ShouldBe(data);
         }
 
         [TestMethod]
-        public void Read_CutOff_Throws()
+        [DataRow(12)]
+        [DataRow(24)]
+        public void Environment10000_ReadsOptionalSecondVector(int length)
+        {
+            byte[] data = Bytes(1f, 2f, 3f, 4f, 5f, 6f).Take(length).ToArray();
+
+            Environment10000Layer layer = Read<Environment10000Layer>(WorldLayerIds.DefaultEnvironment, WorldLayerIds.Environment10000, data);
+            byte[] written = layer.GetData();
+
+            layer.Data1.ShouldBe(new Vector3(1, 2, 3));
+            layer.Data2.ShouldBe(length > 12 ? new Vector3(4, 5, 6) : null);
+            written.ShouldBe(data);
+        }
+
+        [TestMethod]
+        public void ChunkRange_CutOff_StaysData()
         {
             byte[] data = Bytes(2u, 10u);
 
-            Should.Throw<InvalidDataException>(() => ZoneChunkRange.Read(data));
+            GtDataLayer layer = Read<GtDataLayer>(WorldLayerIds.ChunkInfo, WorldLayerIds.ChunkRange, data);
+
+            layer.Data.ShouldBe(data);
         }
 
         [TestMethod]
-        public void GtLayerReadList_MarkedAndUnmarked_ReadsAll()
+        public void Containers_BelowChunkBlocks_ReadTheirChildren()
         {
-            byte[] data = Layer(0x40101, new byte[] { 1, 2 }).Concat(Layer(0x40102, new byte[] { 3 }, false)).ToArray();
+            byte[] data = Layer(WorldLayerIds.PropEnvironment, Layer(0x3E8, Bytes(1u)));
 
-            var layers = GtLayer.ReadList(data);
+            GtContainerLayer props = Read<GtContainerLayer>(WorldLayerIds.SubChunk, WorldLayerIds.Props, data);
+            byte[] written = props.GetData();
 
-            layers.Select(l => l.Id).ShouldBe(new[] { 0x40101U, 0x40102U });
-            layers[1].Data.ShouldBe(new byte[] { 3 });
-        }
-
-        [TestMethod]
-        public void GtLayerReadList_CutOff_Throws()
-        {
-            byte[] data = Layer(0x40101, new byte[] { 1, 2 });
-
-            Should.Throw<InvalidDataException>(() => GtLayer.ReadList(data.AsSpan(0, data.Length - 1).ToArray()));
+            props.Find(WorldLayerIds.PropEnvironment).ShouldBeOfType<GtContainerLayer>().Find(0x3E8).ShouldBeOfType<GtDataLayer>();
+            written.ShouldBe(data);
         }
     }
 }
