@@ -79,6 +79,7 @@ namespace FauFau.Formats
                 (ZoneRoot, Melding) => new GtContainerLayer(id),
                 (ZoneRoot, ChunkInfo) => new GtContainerLayer(id),
                 (ZoneRoot, Path) => new ZonePathLayer(),
+                (ZoneRoot, WorldChunkImport) => new EnwfLayer(id),
                 (ZoneRoot, Bounds) => new ZoneBoundsLayer(),
                 (ZoneRoot, PropEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
                 (ZoneRoot, PropDoodads2) => new GtContainerLayer(id),
@@ -96,8 +97,11 @@ namespace FauFau.Formats
                 (Props, PropEnvironment) => new GtContainerLayer(id),
 
                 (Lod or SubChunk, Terrain) => new GtContainerLayer(id),
+                (Lod or SubChunk, StaticGeometryCollision) => new EnwfLayer(id),
                 (Lod or SubChunk, SubZoneGrid) => new SubZoneGridLayer(),
+                (Lod or SubChunk, MovementBlockerCollision) => new EnwfLayer(id),
                 (Lod or SubChunk, ChunkEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
+                (Lod or SubChunk, WaterCollision) => new EnwfLayer(id),
                 (Lod or SubChunk, Props) => new GtContainerLayer(id),
                 (Lod or SubChunk, ChunkPropEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
                 (Lod or SubChunk, Sectors) => new GtContainerLayer(id),
@@ -501,6 +505,7 @@ namespace FauFau.Formats
         }
 
         public byte Byte() => Take(1)[0];
+        public ushort UShort() => BinaryPrimitives.ReadUInt16LittleEndian(Take(2));
         public uint UInt() => BinaryPrimitives.ReadUInt32LittleEndian(Take(4));
         public float Float() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
         public Vector3 Vector3() => new Vector3(Float(), Float(), Float());

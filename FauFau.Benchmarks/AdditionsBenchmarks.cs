@@ -4,7 +4,6 @@ using System.IO;
 using System.Security.Cryptography;
 using BenchmarkDotNet.Attributes;
 using FauFau.Formats;
-using FauFau.Formats.GtChunk;
 using FauFau.Util;
 
 namespace FauFau.Benchmarks
@@ -159,10 +158,10 @@ namespace FauFau.Benchmarks
 
                 foreach (GtLayer layer in layers)
                 {
-                    if (layer.Id != WorldLayerIds.StaticGeometryCollision || layer is not GtDataLayer collision)
+                    if (layer.Id != WorldLayerIds.StaticGeometryCollision || layer is not EnwfLayer enwf)
                         continue;
 
-                    foreach (var block in GtChunk_MeshData.Read(collision.Data).Verts)
+                    foreach (var block in enwf.VertBlocks)
                         vertices += block.Length;
                 }
             }

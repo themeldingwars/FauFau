@@ -4,7 +4,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using Bitter;
-using FauFau.Formats.GtChunk;
 using FauFau.Util;
 
 namespace FauFau.Formats
@@ -86,41 +85,6 @@ namespace FauFau.Formats
             return GtLayer.ReadList(DatBlocks[subChunkIdx].Decompress(), WorldLayerIds.SubChunk);
         }
 
-        public List<NodeDataWrapper> GetSubChunkNodes(int subChunkIdx)
-        {
-            var nodes = new List<NodeDataWrapper>();
-
-            var sc = GetDecompressedSubChunk(subChunkIdx);
-            using (var bs = new BinaryStream(new MemoryStream(sc.ToArray()))) {
-                while (bs.ByteOffset < bs.Length) {
-                    var nodeHeader = ReadNodeHeader(bs);
-
-                    switch ((NodeTypes) nodeHeader.NodeId) {
-                        case NodeTypes.StaticGeometryCollision:
-                        case NodeTypes.MovementBlockerCollision:
-                        case NodeTypes.WaterCollision:
-                        {
-                            var geoData = new GtChunk_MeshData(bs, nodeHeader.Length);
-                            var wrapper = new NodeDataWrapper(nodeHeader.NodeId, geoData);
-                            nodes.Add(wrapper);
-                            break;
-                        }
-
-                        default:
-                        {
-                            var nodeData = bs.Read.ByteArray(nodeHeader.Length);
-                            var wrapper  = new NodeDataWrapper(nodeHeader.NodeId, nodeData);
-                            nodes.Add(wrapper);
-
-                            break;
-                        }
-                    }
-                }
-            }
-
-            return nodes;
-        }
-
         // load the compressed chunks into memory, doesn't decompress them
         private void LoadCompressedBlocks(BinaryStream bs)
         {
@@ -194,23 +158,6 @@ namespace FauFau.Formats
             WaterObjectChunk         = 262664,
             VegetationChunk2         = 262665,
             GeometryTree             = 262672,
-        }
-
-        // casting and boxing yay, but can revise later if its really an issue in how it ends up getting used
-        public struct NodeDataWrapper
-        {
-            public uint   NodeId;
-            public object NodeData;
-
-            public NodeDataWrapper(uint nodeType, object obj)
-            {
-                NodeId   = nodeType;
-                NodeData = obj;
-            }
-
-            public NodeTypes NodeType => (NodeTypes) NodeId;
-
-            public GtChunk_MeshData AsMeshData => NodeData as GtChunk_MeshData;
         }
 
         // Mapp an lod idx to compressed blocks

@@ -37,7 +37,7 @@ Most formats derive from Bitter's `BinaryWrapper`, so they read from a file path
 | `GtLayer`                         |                                  | The layer tree that zones, chunks and environments share, typed by the id of the layer and its parent |
 | `GtContainerLayer`, `GtDataLayer` |                                  | Layers that hold child layers, and layers FauFau has no type for                                      |
 | `WorldLayerIds`                   |                                  | The ids of the zone and chunk layers                                                                  |
-| `GtChunk_MeshData`                       |                                  | The collision mesh of a chunk's collision layers, plus their Havok data as raw bytes                  |
+| `EnwfLayer`                       |                                  | The collision layers of chunks and the world chunk import of zones, mesh and Havok data               |
 | `ZoneBoundsLayer`                 |                                  | The bounds of a zone                                                                                  |
 | `ZoneSkyboxLayer`                 |                                  | The skybox record of a zone                                                                           |
 | `ZoneChunkRangeLayer`             |                                  | The chunk coordinates a zone covers                                                                   |
