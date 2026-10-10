@@ -37,6 +37,9 @@ namespace FauFau.Tests
                         case byte[] bytes:
                             writer.Write(bytes);
                             break;
+                        case object[] nested:
+                            writer.Write(Bytes(nested));
+                            break;
                         case string s:
                             writer.Write((uint)Encoding.UTF8.GetByteCount(s));
                             writer.Write(Encoding.UTF8.GetBytes(s));

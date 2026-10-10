@@ -38,6 +38,7 @@ Most formats derive from Bitter's `BinaryWrapper`, so they read from a file path
 | `GtContainerLayer`, `GtDataLayer` |                                  | Layers that hold child layers, and layers FauFau has no type for                                      |
 | `WorldLayerIds`                   |                                  | The ids of the zone and chunk layers                                                                  |
 | `EnwfLayer`                       |                                  | The collision layers of chunks and the world chunk import of zones, mesh and Havok data               |
+| `CameraSequenceLayer`             |                                  | The cinematics of a zone: camera nodes, shots, NPCs, sounds, effects and lights                       |
 | `ZoneBoundsLayer`                 |                                  | The bounds of a zone                                                                                  |
 | `ZoneSkyboxLayer`                 |                                  | The skybox record of a zone                                                                           |
 | `ZoneChunkRangeLayer`             |                                  | The chunk coordinates a zone covers                                                                   |

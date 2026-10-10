@@ -148,7 +148,7 @@ namespace FauFau.Formats
         }
 
         // A layer that doesn't parse as its type stays raw data, so it still writes back as it was
-        private static GtLayer Create(uint parentId, uint id, ReadOnlySpan<byte> data, bool hasMarker)
+        internal static GtLayer Create(uint parentId, uint id, ReadOnlySpan<byte> data, bool hasMarker)
         {
             GtLayer layer = WorldLayerIds.Create(parentId, id);
             if (layer != null)

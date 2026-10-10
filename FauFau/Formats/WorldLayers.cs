@@ -83,6 +83,7 @@ namespace FauFau.Formats
                 (ZoneRoot, Bounds) => new ZoneBoundsLayer(),
                 (ZoneRoot, PropEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
                 (ZoneRoot, PropDoodads2) => new GtContainerLayer(id),
+                (ZoneRoot, CameraSequence) => new CameraSequenceLayer(),
                 (ZoneRoot, SubZoneRegion) => new SubZoneRegionLayer(),
 
                 (Melding, MeldingPerimeter) => new MeldingPerimeterLayer(),
@@ -505,6 +506,7 @@ namespace FauFau.Formats
         }
 
         public byte Byte() => Take(1)[0];
+        public bool Bool() => Take(1)[0] != 0;
         public ushort UShort() => BinaryPrimitives.ReadUInt16LittleEndian(Take(2));
         public uint UInt() => BinaryPrimitives.ReadUInt32LittleEndian(Take(4));
         public float Float() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
@@ -512,8 +514,23 @@ namespace FauFau.Formats
         public Vector4 Vector4() => new Vector4(Float(), Float(), Float(), Float());
         public byte[] Bytes(int length) => Take(length).ToArray();
 
+        // Four rows of three floats, the last one is the translation
+        public Matrix4x4 Transform() => new Matrix4x4(Float(), Float(), Float(), 0, Float(), Float(), Float(), 0, Float(), Float(), Float(), 0, Float(), Float(), Float(), 1);
+
         // Length prefixed, without NUL
         public string String() => Encoding.UTF8.GetString(Take((int)UInt()));
+
+        // A layer inside the data of another one, the parent id decides its type
+        public GtLayer Layer(uint parentId)
+        {
+            bool marked = Remaining >= 8 && BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(position)) == GtLayer.Marker;
+            if (marked)
+                Take(8);
+
+            uint id = UInt();
+            uint length = UInt();
+            return GtLayer.Create(parentId, id, Take((int)Math.Min(length, int.MaxValue)), marked);
+        }
     }
 
     internal static class LayerWriterExtensions
@@ -531,6 +548,14 @@ namespace FauFau.Formats
             writer.Write(value.Y);
             writer.Write(value.Z);
             writer.Write(value.W);
+        }
+
+        public static void WriteTransform(this System.IO.BinaryWriter writer, Matrix4x4 value)
+        {
+            writer.Write(new Vector3(value.M11, value.M12, value.M13));
+            writer.Write(new Vector3(value.M21, value.M22, value.M23));
+            writer.Write(new Vector3(value.M31, value.M32, value.M33));
+            writer.Write(value.Translation);
         }
 
         // BinaryWriter.Write(string) uses a 7 bit encoded length, the layers a uint
