@@ -30,26 +30,29 @@ Most formats derive from Bitter's `BinaryWrapper`, so they read from a file path
 
 ### World
 
-| Class                   | Files                            | Notes                                                                                |
-|-------------------------|----------------------------------|--------------------------------------------------------------------------------------|
-| `Zone`                  | `maps/*.zone`                    | The layers of a zone and the terrain chunks it references                            |
-| `GtChunkV8`             | `maps/chunks/*.gtchunk`          | Terrain chunks, decompresses the layers of each LOD and sub chunk                    |
-| `GtChunk_MeshData`      |                                  | The collision mesh of a chunk's collision layers, plus their Havok data as raw bytes |
-| `GtLayer`               |                                  | The layer tree that zones, chunks, world maps and environments share                 |
-| `WorldLayerIds`         |                                  | The ids of the zone and chunk layers                                                 |
-| `ZoneBounds`            |                                  | The bounds of a zone                                                                 |
-| `ZoneSkybox`            |                                  | The skybox record of a zone                                                          |
-| `ZoneChunkRange`        |                                  | The chunk coordinates a zone covers                                                  |
-| `ZoneChunkRef`          |                                  | A terrain chunk of a zone, from the ChunkRef and ChunkRef2 layers                    |
-| `ZonePath`              |                                  | The steps of a path                                                                  |
-| `MeldingPerimeter`      |                                  | A melding perimeter and its control points                                           |
-| `SubZoneRegion`         |                                  | The area of a sub zone as a bitmap                                                   |
-| `SubZoneGrid`           |                                  | The sub zone of each cell of a chunk                                                 |
-| `EncounterNameRegistry` |                                  | The encounter names of the props of a zone or chunk                                  |
-| `WorldDir`              | `maps/*.worldDir`                | The index of a zone's world map tiles                                                |
-| `WorldMap`              | `maps/worldmapchunks/*.worldMap` | A world map tile with its textures and geometry                                      |
-| `Bnv`                   | `assetdb/*.bnv`                  | Environment assets, the environment layer on its own                                 |
-| `ScZone`                | `assetdb/*.scZone`               | The props and environment of the 3D scenes in the UI                                 |
+| Class                             | Files                            | Notes                                                                                                 |
+|-----------------------------------|----------------------------------|-------------------------------------------------------------------------------------------------------|
+| `Zone`                            | `maps/*.zone`                    | Reads and writes zones, the layers and the terrain chunks they reference                              |
+| `GtChunkV8`                       | `maps/chunks/*.gtchunk`          | Terrain chunks, decompresses the layers of each LOD and sub chunk                                     |
+| `GtLayer`                         |                                  | The layer tree that zones, chunks and environments share, typed by the id of the layer and its parent |
+| `GtContainerLayer`, `GtDataLayer` |                                  | Layers that hold child layers, and layers FauFau has no type for                                      |
+| `WorldLayerIds`                   |                                  | The ids of the zone and chunk layers                                                                  |
+| `EnwfLayer`                       |                                  | The collision layers of chunks and the world chunk import of zones, mesh and Havok data               |
+| `CameraSequenceLayer`             |                                  | The cinematics of a zone: camera nodes, shots, NPCs, sounds, effects and lights                       |
+| `ZoneBoundsLayer`                 |                                  | The bounds of a zone                                                                                  |
+| `ZoneSkyboxLayer`                 |                                  | The skybox record of a zone                                                                           |
+| `ZoneChunkRangeLayer`             |                                  | The chunk coordinates a zone covers                                                                   |
+| `ZoneChunkRefLayer`               |                                  | A terrain chunk of a zone, from the ChunkRef and ChunkRef2 layers                                     |
+| `ZonePathLayer`                   |                                  | The steps of a path                                                                                   |
+| `MeldingPerimeterLayer`           |                                  | A melding perimeter and its control points                                                            |
+| `SubZoneRegionLayer`              |                                  | The area of a sub zone as a bitmap                                                                    |
+| `SubZoneGridLayer`                |                                  | The sub zone of each cell of a chunk                                                                  |
+| `EncounterNameRegistryLayer`      |                                  | The encounter names of the props of a zone or chunk                                                   |
+| `Environment10000Layer`           |                                  | Two vectors of the default environment of a zone                                                      |
+| `WorldDir`                        | `maps/*.worldDir`                | The index of a zone's world map tiles                                                                 |
+| `WorldMap`                        | `maps/worldmapchunks/*.worldMap` | A world map tile with its textures and geometry                                                       |
+| `Bnv`                             | `assetdb/*.bnv`                  | Environment assets, the environment layer on its own                                                  |
+| `ScZone`                          | `assetdb/*.scZone`               | The props and environment of the 3D scenes in the UI                                                  |
 
 ### Assets
 

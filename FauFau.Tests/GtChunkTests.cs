@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Numerics;
 using Bitter;
+using FauFau.Formats;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shouldly;
 using static FauFau.Formats.GtChunkV8;
@@ -12,51 +13,51 @@ namespace FauFau.Tests
     [TestClass]
     public class GtChunkTests
     {
-        private static RootNode CreateRoot()
+        private static RootLayer CreateRoot()
         {
-            SubChunkNode[] subChunks = new SubChunkNode[4];
+            SubChunkLayer[] subChunks = new SubChunkLayer[4];
             for (int i = 0; i < subChunks.Length; i++)
-                subChunks[i] = new SubChunkNode { NodeId = (uint)NodeTypes.SubChunk, CompressedSize = 100 + i, UncompressedSize = 200 + i };
+                subChunks[i] = new SubChunkLayer { Id = WorldLayerIds.SubChunk, CompressedSize = 100 + i, UncompressedSize = 200 + i };
 
-            return new RootNode
+            return new RootLayer
             {
-                NodeId = (uint)NodeTypes.Root,
+                Id = WorldLayerIds.ChunkRoot,
                 Version = VERSION,
                 Timestamp = 1234,
                 NumLods = 1,
-                LodNodes = new[]
+                LodLayers = new[]
                 {
-                    new LodNode { NodeId = (uint)NodeTypes.LOD, NumSubchunks = 4, CompressedSize = 10, UncompressedSize = 20, SubChunkNodes = subChunks },
+                    new LodLayer { Id = WorldLayerIds.Lod, NumSubchunks = 4, CompressedSize = 10, UncompressedSize = 20, SubChunkLayers = subChunks },
                 },
             };
         }
 
         [TestMethod]
-        public void RootNode_WriteReadThroughReadWrite_KeepsLodHeaders()
+        public void RootLayer_WriteReadThroughReadWrite_KeepsLodHeaders()
         {
             BinaryStream stream = new BinaryStream(new MemoryStream());
             CreateRoot().Write(stream);
             stream.ByteOffset = 0;
 
-            RootNode read = stream.Read.Type<RootNode>();
+            RootLayer read = stream.Read.Type<RootLayer>();
 
             read.Version.ShouldBe((uint)VERSION);
             read.NumLods.ShouldBe(1U);
-            read.LodNodes[0].NumSubchunks.ShouldBe(4U);
-            read.LodNodes[0].CompressedSize.ShouldBe(10);
-            read.LodNodes[0].UncompressedSize.ShouldBe(20);
-            read.LodNodes[0].SubChunkNodes[3].UncompressedSize.ShouldBe(203);
+            read.LodLayers[0].NumSubchunks.ShouldBe(4U);
+            read.LodLayers[0].CompressedSize.ShouldBe(10);
+            read.LodLayers[0].UncompressedSize.ShouldBe(20);
+            read.LodLayers[0].SubChunkLayers[3].UncompressedSize.ShouldBe(203);
             stream.ByteOffset.ShouldBe(stream.Length);
         }
 
         [TestMethod]
-        public void SubChunkNode_Write_StoresMinBeforeMax()
+        public void SubChunkLayer_Write_StoresMinBeforeMax()
         {
-            SubChunkNode node = new SubChunkNode { BoundsMin = new Vector3(-256, -256, 0), BoundsMax = new Vector3(256, 256, 0) };
+            SubChunkLayer node = new SubChunkLayer { BoundsMin = new Vector3(-256, -256, 0), BoundsMax = new Vector3(256, 256, 0) };
             BinaryStream stream = new BinaryStream(new MemoryStream());
 
             node.Write(stream);
-            stream.ByteOffset = Node.HeaderLength + 12;
+            stream.ByteOffset = LayerHeader.HeaderLength + 12;
             float firstX = stream.Read.Float();
 
             firstX.ShouldBe(-256f);

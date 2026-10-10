@@ -4,7 +4,6 @@ using System.IO;
 using System.Security.Cryptography;
 using BenchmarkDotNet.Attributes;
 using FauFau.Formats;
-using FauFau.Formats.GtChunk;
 using FauFau.Util;
 
 namespace FauFau.Benchmarks
@@ -128,17 +127,17 @@ namespace FauFau.Benchmarks
             int count = read.GetChunks().Count;
             foreach (GtLayer layer in read.Root.Children)
             {
-                switch (layer.Id)
+                switch (layer)
                 {
-                    case WorldLayerIds.Path:
-                        count += ZonePath.Read(layer.Data).Steps.Count;
+                    case ZonePathLayer path:
+                        count += path.Steps.Count;
                         break;
-                    case WorldLayerIds.SubZoneRegion:
-                        count += SubZoneRegion.Read(layer.Data).Bitmap.Length;
+                    case SubZoneRegionLayer region:
+                        count += region.Bitmap.Length;
                         break;
-                    case WorldLayerIds.Melding:
-                        foreach (GtLayer perimeter in layer.FindAll(WorldLayerIds.MeldingPerimeter))
-                            count += MeldingPerimeter.Read(perimeter.Data).Perimeters.Count;
+                    case GtContainerLayer melding when melding.Id == WorldLayerIds.Melding:
+                        foreach (MeldingPerimeterLayer perimeter in melding.FindAll<MeldingPerimeterLayer>())
+                            count += perimeter.Perimeters.Count;
                         break;
                 }
             }
@@ -159,10 +158,10 @@ namespace FauFau.Benchmarks
 
                 foreach (GtLayer layer in layers)
                 {
-                    if (layer.Id != WorldLayerIds.StaticGeometryCollision)
+                    if (layer.Id != WorldLayerIds.StaticGeometryCollision || layer is not EnwfLayer enwf)
                         continue;
 
-                    foreach (var block in GtChunk_MeshData.Read(layer.Data).Verts)
+                    foreach (var block in enwf.VertBlocks)
                         vertices += block.Length;
                 }
             }

@@ -27,7 +27,7 @@ namespace FauFau.Formats
         public SceneSettings Settings;
 
         // Its children are the environment layers (0x50001), the same as in zones
-        public GtLayer Environment;
+        public GtContainerLayer Environment;
 
         // The same prop layers the chunks use
         public List<GtLayer> Props = new ();
@@ -60,24 +60,23 @@ namespace FauFau.Formats
             {
                 switch (layer.Id)
                 {
-                    case SettingsWithEnvironmentLayerId:
-                    case SettingsLayerId:
-                        ReadSettings(layer);
+                    case SettingsWithEnvironmentLayerId or SettingsLayerId when layer is GtDataLayer settings:
+                        ReadSettings(settings);
                         break;
                     case EnvironmentLayerId:
-                        Environment = layer;
+                        Environment = layer as GtContainerLayer;
                         break;
-                    case PropsLayerId:
-                        Props = ReadProps(layer.Data);
+                    case PropsLayerId when layer is GtDataLayer props:
+                        Props = ReadProps(props.Data);
                         break;
-                    case ContextsLayerId:
-                        Contexts = ReadContexts(layer.Data);
+                    case ContextsLayerId when layer is GtDataLayer contexts:
+                        Contexts = ReadContexts(contexts.Data);
                         break;
                 }
             }
         }
 
-        private void ReadSettings(GtLayer layer)
+        private void ReadSettings(GtDataLayer layer)
         {
             BinaryStream bs = new BinaryStream(new MemoryStream(layer.Data));
             Bitter.BinaryReader Read = bs.Read;
@@ -94,10 +93,10 @@ namespace FauFau.Formats
             if (layer.Id == SettingsWithEnvironmentLayerId)
             {
                 // The environment layers follow the settings inside the same layer
-                GtLayer environment = new GtLayer { Id = EnvironmentLayerId };
+                GtContainerLayer environment = new GtContainerLayer(EnvironmentLayerId);
                 while (bs.ByteOffset < bs.Length)
                 {
-                    environment.Children.Add(GtLayer.Read(bs));
+                    environment.Children.Add(GtLayer.Read(bs, EnvironmentLayerId));
                 }
                 Environment = environment;
             }
@@ -130,7 +129,7 @@ namespace FauFau.Formats
             BinaryStream bs = new BinaryStream(new MemoryStream(decoded));
             while (bs.ByteOffset < bs.Length)
             {
-                props.Add(GtLayer.Read(bs));
+                props.Add(GtLayer.Read(bs, WorldLayerIds.Props));
             }
             return props;
         }

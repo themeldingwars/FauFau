@@ -6,16 +6,72 @@ using System.IO;
 
 namespace FauFau.Formats
 {
-    // A layer of the world formats (zones, chunks, world maps), either a container of child layers or a leaf with data
-    public class GtLayer
+    // A layer of the world formats (zones, chunks, environments), either a container of child layers, a typed layer or raw data.
+    // What a layer holds depends on its id and the id of its parent, see WorldLayerIds.
+    public abstract class GtLayer
     {
         public const ulong Marker = 0x12ED5A12ED5B12ED;
 
-        public uint Id;
-        public byte[] Data = Array.Empty<byte>();
-        public List<GtLayer> Children = new ();
+        // The parent id of layers at the top of a file
+        public const uint NoParent = uint.MaxValue;
 
-        public bool IsContainer => Children.Count > 0;
+        public uint Id;
+
+        // Zones and chunks always write the marker, the client also reads layers without it
+        public bool HasMarker = true;
+
+        protected GtLayer(uint id)
+        {
+            Id = id;
+        }
+
+        // The data without the layer header, throws when it doesn't match the layer
+        protected abstract void ReadData(ReadOnlySpan<byte> data);
+
+        protected abstract void WriteData(System.IO.BinaryWriter writer);
+
+        public byte[] GetData()
+        {
+            using MemoryStream stream = new MemoryStream();
+            using (System.IO.BinaryWriter writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.UTF8, true))
+            {
+                WriteData(writer);
+            }
+            return stream.ToArray();
+        }
+
+        // The layer with its header
+        public byte[] ToArray()
+        {
+            byte[] data = GetData();
+            int header = HasMarker ? 16 : 8;
+            byte[] bytes = new byte[header + data.Length];
+            if (HasMarker)
+            {
+                BinaryPrimitives.WriteUInt64LittleEndian(bytes, Marker);
+            }
+
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(header - 8), Id);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(header - 4), (uint)data.Length);
+            data.CopyTo(bytes, header);
+            return bytes;
+        }
+
+        public void Write(BinaryStream bs)
+        {
+            bs.Write.ByteArray(ToArray());
+        }
+
+        // Layers back to back, like in the decompressed blocks of a chunk
+        public static byte[] ToArray(IEnumerable<GtLayer> layers)
+        {
+            using MemoryStream stream = new MemoryStream();
+            foreach (GtLayer layer in layers)
+            {
+                stream.Write(layer.ToArray());
+            }
+            return stream.ToArray();
+        }
 
         // The 8 bytes are either the marker, followed by id and length, or already the id and length
         public static (uint Id, uint Length) ReadHeader(BinaryStream bs)
@@ -28,9 +84,9 @@ namespace FauFau.Formats
             return (bs.Read.UInt(), bs.Read.UInt());
         }
 
-        // Reads a marked layer and every marked layer below it
-        public static GtLayer Read(BinaryStream bs)
+        public static GtLayer Read(BinaryStream bs, uint parentId = NoParent)
         {
+            long start = bs.ByteOffset;
             (uint id, uint length) = ReadHeader(bs);
             if (bs.Length - bs.ByteOffset < length)
             {
@@ -38,98 +94,121 @@ namespace FauFau.Formats
             }
 
             byte[] data = bs.Read.ByteArray((int)length);
-            return FromData(id, data);
+            return Create(parentId, id, data, bs.ByteOffset - start - length == 16);
         }
 
-        // Layers back to back, with or without marker, like in the decompressed blocks of a chunk
-        public static List<GtLayer> ReadList(byte[] data)
+        public static List<GtLayer> ReadList(ReadOnlySpan<byte> data, uint parentId = NoParent)
         {
             List<GtLayer> layers = new ();
             int position = 0;
             while (position < data.Length)
             {
-                if (data.Length - position < 8)
+                if (!TryReadHeader(data, position, out uint id, out int length, out int header))
                 {
                     throw new InvalidDataException($"Layer header at {position} is cut off");
                 }
 
-                ulong first = BinaryPrimitives.ReadUInt64LittleEndian(data.AsSpan(position));
-                uint id = (uint)first;
-                uint length = (uint)(first >> 32);
-                position += 8;
-                if (first == Marker)
-                {
-                    if (data.Length - position < 8)
-                    {
-                        throw new InvalidDataException($"Layer header at {position - 8} is cut off");
-                    }
-
-                    id = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position));
-                    length = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position + 4));
-                    position += 8;
-                }
-
+                position += header;
                 if (data.Length - position < length)
                 {
                     throw new InvalidDataException($"Layer 0x{id:X} is cut off");
                 }
 
-                layers.Add(FromData(id, data.AsSpan(position, (int)length).ToArray()));
-                position += (int)length;
+                layers.Add(Create(parentId, id, data.Slice(position, length), header == 16));
+                position += length;
             }
             return layers;
         }
 
-        private static GtLayer FromData(uint id, byte[] data)
+        private static bool TryReadHeader(ReadOnlySpan<byte> data, int position, out uint id, out int length, out int header)
         {
-            GtLayer layer = new GtLayer { Id = id };
-            List<GtLayer> children = TryReadChildren(data);
-            if (children != null)
+            id = 0;
+            length = 0;
+            header = 8;
+            if (data.Length - position < 8)
             {
-                layer.Children = children;
+                return false;
             }
-            else
+
+            ulong first = BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(position));
+            if (first == Marker)
             {
-                layer.Data = data;
+                if (data.Length - position < 16)
+                {
+                    return false;
+                }
+
+                header = 16;
+                first = BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(position + 8));
             }
-            return layer;
+
+            id = (uint)first;
+            length = (int)Math.Min(first >> 32, int.MaxValue);
+            return true;
         }
 
-        // Layers hold either data or children, it's a container when the data is nothing but marked layers
-        private static List<GtLayer> TryReadChildren(byte[] data)
+        // A layer that doesn't parse as its type stays raw data, so it still writes back as it was
+        internal static GtLayer Create(uint parentId, uint id, ReadOnlySpan<byte> data, bool hasMarker)
         {
-            if (data.Length < 16 || BinaryPrimitives.ReadUInt64LittleEndian(data) != Marker)
+            GtLayer layer = WorldLayerIds.Create(parentId, id);
+            if (layer != null)
             {
-                return null;
-            }
-
-            List<(uint Id, int Start, int Length)> spans = new ();
-            int position = 0;
-            while (position < data.Length)
-            {
-                if (data.Length - position < 16 || BinaryPrimitives.ReadUInt64LittleEndian(data.AsSpan(position)) != Marker)
+                try
                 {
-                    return null;
+                    layer.ReadData(data);
                 }
-
-                uint id = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position + 8));
-                uint length = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position + 12));
-                position += 16;
-                if (data.Length - position < length)
+                catch (InvalidDataException)
                 {
-                    return null;
+                    layer = null;
                 }
-
-                spans.Add((id, position, (int)length));
-                position += (int)length;
             }
 
-            List<GtLayer> children = new (spans.Count);
-            foreach ((uint id, int start, int length) in spans)
+            layer ??= new GtDataLayer(id) { Data = data.ToArray() };
+            layer.HasMarker = hasMarker;
+            return layer;
+        }
+    }
+
+    // A layer FauFau doesn't know, or whose data didn't match its type
+    public sealed class GtDataLayer : GtLayer
+    {
+        public byte[] Data = Array.Empty<byte>();
+
+        public GtDataLayer(uint id) : base(id)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
+        {
+            Data = data.ToArray();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(Data);
+        }
+    }
+
+    // A layer that holds nothing but child layers
+    public sealed class GtContainerLayer : GtLayer
+    {
+        public List<GtLayer> Children = new ();
+
+        public GtContainerLayer(uint id) : base(id)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
+        {
+            Children = ReadList(data, Id);
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            foreach (GtLayer child in Children)
             {
-                children.Add(FromData(id, data.AsSpan(start, length).ToArray()));
+                writer.Write(child.ToArray());
             }
-            return children;
         }
 
         public GtLayer Find(uint id)
@@ -144,6 +223,18 @@ namespace FauFau.Formats
             return null;
         }
 
+        public T Find<T>() where T : GtLayer
+        {
+            foreach (GtLayer child in Children)
+            {
+                if (child is T typed)
+                {
+                    return typed;
+                }
+            }
+            return null;
+        }
+
         public IEnumerable<GtLayer> FindAll(uint id)
         {
             foreach (GtLayer child in Children)
@@ -151,6 +242,17 @@ namespace FauFau.Formats
                 if (child.Id == id)
                 {
                     yield return child;
+                }
+            }
+        }
+
+        public IEnumerable<T> FindAll<T>() where T : GtLayer
+        {
+            foreach (GtLayer child in Children)
+            {
+                if (child is T typed)
+                {
+                    yield return typed;
                 }
             }
         }

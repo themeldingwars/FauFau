@@ -38,45 +38,126 @@ namespace FauFau.Formats
         public const uint ChunkRef = 0x10101;
 
         // Below DefaultEnvironment
+        public const uint Environment10000 = 0x2710;
         public const uint PropEnvironment = 0x50001;
 
         // Chunk files, the shared data of a LOD and its sub chunks hold the layers below Lod and SubChunk
         public const uint ChunkRoot = 0x40000;
         public const uint Lod = 0x40001;
         public const uint SubChunk = 0x40002;
+        public const uint Terrain = 0x40100;
         public const uint StaticGeometryCollision = 0x40101;
         public const uint SubZoneGrid = 0x40102;
         public const uint MovementBlockerCollision = 0x40103;
         public const uint ChunkEncounterNameRegistry = 0x40104;
         public const uint WaterCollision = 0x40105;
+        public const uint Props = 0x40200;
+        public const uint GeometryTree2 = 0x40203;
         public const uint ChunkPropEncounterNameRegistry = 0x40204;
+        public const uint Vegetation = 0x40205;
+        public const uint Overlay = 0x40206;
+        public const uint Sectors = 0x40207;
+        public const uint WaterObjects = 0x40208;
+        public const uint Vegetation2 = 0x40209;
+        public const uint GeometryTree = 0x40210;
+
+        // Below Props and in camera sequences
+        public const uint PropDoodad = 0x50000;
+        public const uint PropLight = 0x50011;
+
+        // The layer type for an id below a parent, null for the layers that stay raw data
+        internal static GtLayer Create(uint parentId, uint id)
+        {
+            return (parentId, id) switch
+            {
+                (GtLayer.NoParent, ZoneRoot) => new GtContainerLayer(id),
+                (GtLayer.NoParent, PropEnvironment) => new GtContainerLayer(id),
+                (GtLayer.NoParent, ScZone.EnvironmentLayerId) => new GtContainerLayer(id),
+
+                (ZoneRoot, Skybox) => new ZoneSkyboxLayer(),
+                (ZoneRoot, DefaultEnvironment) => new GtContainerLayer(id),
+                (ZoneRoot, Melding) => new GtContainerLayer(id),
+                (ZoneRoot, ChunkInfo) => new GtContainerLayer(id),
+                (ZoneRoot, Path) => new ZonePathLayer(),
+                (ZoneRoot, WorldChunkImport) => new EnwfLayer(id),
+                (ZoneRoot, Bounds) => new ZoneBoundsLayer(),
+                (ZoneRoot, PropEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
+                (ZoneRoot, PropDoodads2) => new GtContainerLayer(id),
+                (ZoneRoot, CameraSequence) => new CameraSequenceLayer(),
+                (ZoneRoot, SubZoneRegion) => new SubZoneRegionLayer(),
+
+                (Melding, MeldingPerimeter) => new MeldingPerimeterLayer(),
+
+                (ChunkInfo, ChunkRange) => new ZoneChunkRangeLayer(),
+                (ChunkInfo, ChunkRef) => new ZoneChunkRefLayer(id),
+                (ChunkInfo, ChunkRef2) => new ZoneChunkRefLayer(id),
+
+                (DefaultEnvironment, Environment10000) => new Environment10000Layer(),
+                (DefaultEnvironment, PropEnvironment) => new GtContainerLayer(id),
+                (ScZone.EnvironmentLayerId, PropEnvironment) => new GtContainerLayer(id),
+                (Props, PropEnvironment) => new GtContainerLayer(id),
+
+                (Lod or SubChunk, Terrain) => new GtContainerLayer(id),
+                (Lod or SubChunk, StaticGeometryCollision) => new EnwfLayer(id),
+                (Lod or SubChunk, SubZoneGrid) => new SubZoneGridLayer(),
+                (Lod or SubChunk, MovementBlockerCollision) => new EnwfLayer(id),
+                (Lod or SubChunk, ChunkEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
+                (Lod or SubChunk, WaterCollision) => new EnwfLayer(id),
+                (Lod or SubChunk, Props) => new GtContainerLayer(id),
+                (Lod or SubChunk, ChunkPropEncounterNameRegistry) => new EncounterNameRegistryLayer(id),
+                (Lod or SubChunk, Sectors) => new GtContainerLayer(id),
+                _ => null,
+            };
+        }
     }
 
-    public sealed class ZoneBounds
+    public sealed class ZoneBoundsLayer : GtLayer
     {
         public Vector3 Min;
         public Vector3 Max;
 
-        public static ZoneBounds Read(ReadOnlySpan<byte> data)
+        public ZoneBoundsLayer() : base(WorldLayerIds.Bounds)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            return new ZoneBounds { Min = read.Vector3(), Max = read.Vector3() };
+            Min = read.Vector3();
+            Max = read.Vector3();
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(Min);
+            writer.Write(Max);
         }
     }
 
-    public sealed class ZoneSkybox
+    public sealed class ZoneSkyboxLayer : GtLayer
     {
         public uint SkyboxRecordId;
 
-        public static ZoneSkybox Read(ReadOnlySpan<byte> data)
+        public ZoneSkyboxLayer() : base(WorldLayerIds.Skybox)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            return new ZoneSkybox { SkyboxRecordId = read.UInt() };
+            SkyboxRecordId = read.UInt();
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(SkyboxRecordId);
         }
     }
 
     // The chunk coordinates on one face of the planet cube that the zone covers
-    public sealed class ZoneChunkRange
+    public sealed class ZoneChunkRangeLayer : GtLayer
     {
         public uint CubeFace;
         public uint MinX;
@@ -84,30 +165,65 @@ namespace FauFau.Formats
         public uint MinY;
         public uint MaxY;
 
+        public ZoneChunkRangeLayer() : base(WorldLayerIds.ChunkRange)
+        {
+        }
+
         public bool Contains(uint x, uint y) => x >= MinX && x <= MaxX && y >= MinY && y <= MaxY;
 
-        public static ZoneChunkRange Read(ReadOnlySpan<byte> data)
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            return new ZoneChunkRange { CubeFace = read.UInt(), MinX = read.UInt(), MaxX = read.UInt(), MinY = read.UInt(), MaxY = read.UInt() };
+            CubeFace = read.UInt();
+            MinX = read.UInt();
+            MaxX = read.UInt();
+            MinY = read.UInt();
+            MaxY = read.UInt();
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(CubeFace);
+            writer.Write(MinX);
+            writer.Write(MaxX);
+            writer.Write(MinY);
+            writer.Write(MaxY);
         }
     }
 
     // ChunkRef layers carry a chunk record id, ChunkRef2 layers only the coordinates
-    public sealed class ZoneChunkRef
+    public sealed class ZoneChunkRefLayer : GtLayer
     {
         public uint X;
         public uint Y;
         public uint ChunkRecordId;
 
-        public static ZoneChunkRef Read(ReadOnlySpan<byte> data)
+        public ZoneChunkRefLayer(uint id = WorldLayerIds.ChunkRef) : base(id)
+        {
+        }
+
+        public bool HasChunkRecordId => Id == WorldLayerIds.ChunkRef;
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            return new ZoneChunkRef { X = read.UInt(), Y = read.UInt(), ChunkRecordId = data.Length >= 12 ? read.UInt() : 0 };
+            X = read.UInt();
+            Y = read.UInt();
+            ChunkRecordId = HasChunkRecordId ? read.UInt() : 0;
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(X);
+            writer.Write(Y);
+            if (HasChunkRecordId)
+                writer.Write(ChunkRecordId);
         }
     }
 
-    public sealed class ZonePath
+    public sealed class ZonePathLayer : GtLayer
     {
         public uint CceId;
         public uint Unk1;
@@ -120,20 +236,40 @@ namespace FauFau.Formats
             public byte[] Action;
         }
 
-        public static ZonePath Read(ReadOnlySpan<byte> data)
+        public ZonePathLayer() : base(WorldLayerIds.Path)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            ZonePath path = new ZonePath { CceId = read.UInt(), Unk1 = read.UInt() };
+            CceId = read.UInt();
+            Unk1 = read.UInt();
             uint count = read.UInt();
+            Steps = new List<Step>();
             for (uint i = 0; i < count; i++)
             {
-                path.Steps.Add(new Step { Position = read.Vector3(), Orientation = read.Vector4(), Action = read.Bytes((int)read.UInt()) });
+                Steps.Add(new Step { Position = read.Vector3(), Orientation = read.Vector4(), Action = read.Bytes((int)read.UInt()) });
             }
-            return path;
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(CceId);
+            writer.Write(Unk1);
+            writer.Write((uint)Steps.Count);
+            foreach (Step step in Steps)
+            {
+                writer.Write(step.Position);
+                writer.Write(step.Orientation);
+                writer.Write((uint)(step.Action?.Length ?? 0));
+                writer.Write(step.Action ?? Array.Empty<byte>());
+            }
         }
     }
 
-    public sealed class MeldingPerimeter
+    public sealed class MeldingPerimeterLayer : GtLayer
     {
         public string Name;
         public uint ControlPoints;
@@ -142,31 +278,63 @@ namespace FauFau.Formats
         public uint Unk1;
         public List<string> Perimeters = new ();
 
-        // Not every perimeter has the byte at the end
+        // Not every perimeter has the byte at the end, the 1962 zones also have two floats after it, 0 and 0 in most
         public byte? Unk2;
+        public float? Unk3;
+        public float? Unk4;
 
-        public static MeldingPerimeter Read(ReadOnlySpan<byte> data)
+        public MeldingPerimeterLayer() : base(WorldLayerIds.MeldingPerimeter)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            MeldingPerimeter perimeter = new MeldingPerimeter { Name = read.String(), ControlPoints = read.UInt(), BitfieldLength = read.UInt() };
-            perimeter.Bitfield = read.Bytes((int)((perimeter.BitfieldLength + 7) / 8));
-            perimeter.Unk1 = read.UInt();
+            Name = read.String();
+            ControlPoints = read.UInt();
+            BitfieldLength = read.UInt();
+            Bitfield = read.Bytes((int)((BitfieldLength + 7) / 8));
+            Unk1 = read.UInt();
 
             uint count = read.UInt();
+            Perimeters = new List<string>();
             for (uint i = 0; i < count; i++)
             {
-                perimeter.Perimeters.Add(read.String());
+                Perimeters.Add(read.String());
             }
 
-            if (read.Remaining > 0)
-                perimeter.Unk2 = read.Byte();
+            Unk2 = read.Remaining > 0 ? read.Byte() : null;
+            Unk3 = read.Remaining > 0 ? read.Float() : null;
+            Unk4 = read.Remaining > 0 ? read.Float() : null;
+            read.End();
+        }
 
-            return perimeter;
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.WriteLengthPrefixed(Name);
+            writer.Write(ControlPoints);
+            writer.Write(BitfieldLength);
+            writer.Write(Bitfield);
+            writer.Write(Unk1);
+            writer.Write((uint)Perimeters.Count);
+            foreach (string perimeter in Perimeters)
+            {
+                writer.WriteLengthPrefixed(perimeter);
+            }
+
+            if (Unk2.HasValue)
+                writer.Write(Unk2.Value);
+
+            if (Unk3.HasValue)
+                writer.Write(Unk3.Value);
+
+            if (Unk4.HasValue)
+                writer.Write(Unk4.Value);
         }
     }
 
     // A bitmap of the zone area that belongs to a sub zone, one bit per cell
-    public sealed class SubZoneRegion
+    public sealed class SubZoneRegionLayer : GtLayer
     {
         public uint RegionId;
         public Vector2 Origin;
@@ -175,41 +343,72 @@ namespace FauFau.Formats
         public float CellSize;
         public byte[] Bitmap;
 
-        public static SubZoneRegion Read(ReadOnlySpan<byte> data)
+        public SubZoneRegionLayer() : base(WorldLayerIds.SubZoneRegion)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            SubZoneRegion region = new SubZoneRegion { RegionId = read.UInt(), Origin = new Vector2(read.Float(), read.Float()) };
-            region.Width = read.UInt();
-            region.Height = read.UInt();
-            region.CellSize = read.Float();
+            RegionId = read.UInt();
+            Origin = new Vector2(read.Float(), read.Float());
+            Width = read.UInt();
+            Height = read.UInt();
+            CellSize = read.Float();
 
             uint length = read.UInt();
-            if (length != (region.Width * region.Height + 7) / 8)
-                throw new InvalidDataException($"The bitmap of sub zone region {region.RegionId} has {length} bytes, not {(region.Width * region.Height + 7) / 8}");
+            if (length != (Width * Height + 7) / 8)
+                throw new InvalidDataException($"The bitmap of sub zone region {RegionId} has {length} bytes, not {(Width * Height + 7) / 8}");
 
-            region.Bitmap = read.Bytes((int)length);
-            return region;
+            Bitmap = read.Bytes((int)length);
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(RegionId);
+            writer.Write(Origin.X);
+            writer.Write(Origin.Y);
+            writer.Write(Width);
+            writer.Write(Height);
+            writer.Write(CellSize);
+            writer.Write((uint)Bitmap.Length);
+            writer.Write(Bitmap);
         }
     }
 
-    public sealed class EncounterNameRegistry
+    // The encounter names of the props of a zone or chunk
+    public sealed class EncounterNameRegistryLayer : GtLayer
     {
-        public string[] Names;
+        public string[] Names = Array.Empty<string>();
 
-        public static EncounterNameRegistry Read(ReadOnlySpan<byte> data)
+        public EncounterNameRegistryLayer(uint id = WorldLayerIds.PropEncounterNameRegistry) : base(id)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            string[] names = new string[read.UInt()];
-            for (int i = 0; i < names.Length; i++)
+            Names = new string[read.UInt()];
+            for (int i = 0; i < Names.Length; i++)
             {
-                names[i] = read.String();
+                Names[i] = read.String();
             }
-            return new EncounterNameRegistry { Names = names };
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write((uint)Names.Length);
+            foreach (string name in Names)
+            {
+                writer.WriteLengthPrefixed(name);
+            }
         }
     }
 
     // The sub zone of each cell of a chunk
-    public sealed class SubZoneGrid
+    public sealed class SubZoneGridLayer : GtLayer
     {
         public uint Unk1;
         public int GridSize;
@@ -217,18 +416,62 @@ namespace FauFau.Formats
         public uint GridCount;
         public byte[] Grid;
 
-        public static SubZoneGrid Read(ReadOnlySpan<byte> data)
+        public SubZoneGridLayer() : base(WorldLayerIds.SubZoneGrid)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
         {
             LayerReader read = new LayerReader(data);
-            SubZoneGrid grid = new SubZoneGrid { Unk1 = read.UInt(), GridSize = (int)read.UInt() };
-            grid.SubZoneIds = new uint[read.UInt()];
-            for (int i = 0; i < grid.SubZoneIds.Length; i++)
+            Unk1 = read.UInt();
+            GridSize = (int)read.UInt();
+            SubZoneIds = new uint[read.UInt()];
+            for (int i = 0; i < SubZoneIds.Length; i++)
             {
-                grid.SubZoneIds[i] = read.UInt();
+                SubZoneIds[i] = read.UInt();
             }
-            grid.GridCount = read.UInt();
-            grid.Grid = read.Bytes((int)(grid.GridCount * grid.GridSize * grid.GridSize));
-            return grid;
+            GridCount = read.UInt();
+            Grid = read.Bytes((int)(GridCount * GridSize * GridSize));
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(Unk1);
+            writer.Write(GridSize);
+            writer.Write((uint)SubZoneIds.Length);
+            foreach (uint id in SubZoneIds)
+            {
+                writer.Write(id);
+            }
+            writer.Write(GridCount);
+            writer.Write(Grid);
+        }
+    }
+
+    // Two vectors below the default environment, older zones (1710) only have the first
+    public sealed class Environment10000Layer : GtLayer
+    {
+        public Vector3 Data1;
+        public Vector3? Data2;
+
+        public Environment10000Layer() : base(WorldLayerIds.Environment10000)
+        {
+        }
+
+        protected override void ReadData(ReadOnlySpan<byte> data)
+        {
+            LayerReader read = new LayerReader(data);
+            Data1 = read.Vector3();
+            Data2 = read.Remaining > 0 ? read.Vector3() : null;
+            read.End();
+        }
+
+        protected override void WriteData(System.IO.BinaryWriter writer)
+        {
+            writer.Write(Data1);
+            if (Data2.HasValue)
+                writer.Write(Data2.Value);
         }
     }
 
@@ -255,14 +498,72 @@ namespace FauFau.Formats
             return span;
         }
 
+        // A layer that has bytes left isn't the type we took it for
+        public void End()
+        {
+            if (Remaining != 0)
+                throw new InvalidDataException($"The layer has {Remaining} bytes left");
+        }
+
         public byte Byte() => Take(1)[0];
+        public bool Bool() => Take(1)[0] != 0;
+        public ushort UShort() => BinaryPrimitives.ReadUInt16LittleEndian(Take(2));
         public uint UInt() => BinaryPrimitives.ReadUInt32LittleEndian(Take(4));
         public float Float() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
         public Vector3 Vector3() => new Vector3(Float(), Float(), Float());
         public Vector4 Vector4() => new Vector4(Float(), Float(), Float(), Float());
         public byte[] Bytes(int length) => Take(length).ToArray();
 
+        // Four rows of three floats, the last one is the translation
+        public Matrix4x4 Transform() => new Matrix4x4(Float(), Float(), Float(), 0, Float(), Float(), Float(), 0, Float(), Float(), Float(), 0, Float(), Float(), Float(), 1);
+
         // Length prefixed, without NUL
         public string String() => Encoding.UTF8.GetString(Take((int)UInt()));
+
+        // A layer inside the data of another one, the parent id decides its type
+        public GtLayer Layer(uint parentId)
+        {
+            bool marked = Remaining >= 8 && BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(position)) == GtLayer.Marker;
+            if (marked)
+                Take(8);
+
+            uint id = UInt();
+            uint length = UInt();
+            return GtLayer.Create(parentId, id, Take((int)Math.Min(length, int.MaxValue)), marked);
+        }
+    }
+
+    internal static class LayerWriterExtensions
+    {
+        public static void Write(this System.IO.BinaryWriter writer, Vector3 value)
+        {
+            writer.Write(value.X);
+            writer.Write(value.Y);
+            writer.Write(value.Z);
+        }
+
+        public static void Write(this System.IO.BinaryWriter writer, Vector4 value)
+        {
+            writer.Write(value.X);
+            writer.Write(value.Y);
+            writer.Write(value.Z);
+            writer.Write(value.W);
+        }
+
+        public static void WriteTransform(this System.IO.BinaryWriter writer, Matrix4x4 value)
+        {
+            writer.Write(new Vector3(value.M11, value.M12, value.M13));
+            writer.Write(new Vector3(value.M21, value.M22, value.M23));
+            writer.Write(new Vector3(value.M31, value.M32, value.M33));
+            writer.Write(value.Translation);
+        }
+
+        // BinaryWriter.Write(string) uses a 7 bit encoded length, the layers a uint
+        public static void WriteLengthPrefixed(this System.IO.BinaryWriter writer, string value)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(value ?? "");
+            writer.Write((uint)bytes.Length);
+            writer.Write(bytes);
+        }
     }
 }

@@ -1,6 +1,8 @@
 using Bitter;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 
 namespace FauFau.Formats
 {
@@ -18,11 +20,11 @@ namespace FauFau.Formats
         public string Name;
 
         // Bounds, skybox, environment, melding, water, chunk info, paths, props and more as layers
-        public GtLayer Root;
+        public GtContainerLayer Root;
 
         public override void Read(BinaryStream bs)
         {
-            BinaryReader Read = bs.Read;
+            Bitter.BinaryReader Read = bs.Read;
 
             Magic = Read.String(4);
             Version = Read.Int();
@@ -36,49 +38,57 @@ namespace FauFau.Formats
                 Read.Byte();
             }
 
-            Root = bs.ByteOffset < bs.Length ? GtLayer.Read(bs) : null;
+            if (bs.ByteOffset >= bs.Length)
+            {
+                Root = null;
+                return;
+            }
+
+            Root = GtLayer.Read(bs) as GtContainerLayer;
+            if (Root == null || Root.Id != RootLayerId)
+            {
+                throw new InvalidDataException($"Expected the zone root layer 0x{RootLayerId:X}");
+            }
+        }
+
+        public override void Write(BinaryStream bs)
+        {
+            Bitter.BinaryWriter Write = bs.Write;
+
+            Write.ByteArray(Encoding.ASCII.GetBytes(Magic));
+            Write.Int(Version);
+            Write.Long(new DateTimeOffset(TimeStamp).ToUnixTimeMilliseconds());
+
+            byte[] name = Encoding.ASCII.GetBytes((Name ?? "") + "\0");
+            Write.Int(name.Length);
+            Write.ByteArray(name);
+
+            Root?.Write(bs);
         }
 
         // The chunk coordinates the zone covers, usually one range on one cube face
-        public List<ZoneChunkRange> GetChunkRanges()
+        public List<ZoneChunkRangeLayer> GetChunkRanges()
         {
-            List<ZoneChunkRange> ranges = new ();
-            GtLayer chunkInfo = Root?.Find(ChunkInfoLayerId);
-            if (chunkInfo == null)
-            {
-                return ranges;
-            }
-
-            foreach (GtLayer range in chunkInfo.FindAll(ChunkRangeLayerId))
-            {
-                ranges.Add(ZoneChunkRange.Read(range.Data));
-            }
-            return ranges;
+            GtContainerLayer chunkInfo = Root?.Find(ChunkInfoLayerId) as GtContainerLayer;
+            return chunkInfo == null ? new List<ZoneChunkRangeLayer>() : new List<ZoneChunkRangeLayer>(chunkInfo.FindAll<ZoneChunkRangeLayer>());
         }
 
         // The terrain chunks of the zone, the files are in maps/chunks
         public List<ChunkRef> GetChunks()
         {
             List<ChunkRef> chunks = new ();
-            GtLayer chunkInfo = Root?.Find(ChunkInfoLayerId);
-            if (chunkInfo == null)
+            if (Root?.Find(ChunkInfoLayerId) is not GtContainerLayer chunkInfo)
             {
                 return chunks;
             }
 
-            List<ZoneChunkRange> ranges = GetChunkRanges();
-            foreach (GtLayer reference in chunkInfo.Children)
+            List<ZoneChunkRangeLayer> ranges = GetChunkRanges();
+            foreach (ZoneChunkRefLayer reference in chunkInfo.FindAll<ZoneChunkRefLayer>())
             {
-                if (reference.Id != ChunkRefLayerId && reference.Id != ChunkRef2LayerId)
-                {
-                    continue;
-                }
-
-                ZoneChunkRef read = ZoneChunkRef.Read(reference.Data);
-                ChunkRef chunk = new ChunkRef { X = read.X, Y = read.Y, ChunkRecordId = read.ChunkRecordId };
+                ChunkRef chunk = new ChunkRef { X = reference.X, Y = reference.Y, ChunkRecordId = reference.ChunkRecordId };
 
                 // The references don't store the cube face, it's the one of the range they're in
-                foreach (ZoneChunkRange range in ranges)
+                foreach (ZoneChunkRangeLayer range in ranges)
                 {
                     if (range.Contains(chunk.X, chunk.Y))
                     {

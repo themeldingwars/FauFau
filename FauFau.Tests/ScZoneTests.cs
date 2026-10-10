@@ -78,9 +78,9 @@ namespace FauFau.Tests
             zone.Settings.Orientation.ShouldBe(new float[] { 0, 0, 0, 1 });
             zone.Settings.Direction.z.ShouldBe(-1f);
             zone.Settings.ReferenceId.ShouldBe(19182U);
-            zone.Environment.Find(Bnv.EnvironmentLayerId).Find(0x3E8).Data.ShouldBe(UInts(1, 1, 7, 8));
+            zone.Environment.Find(Bnv.EnvironmentLayerId).ShouldBeOfType<GtContainerLayer>().Find(0x3E8).ShouldBeOfType<GtDataLayer>().Data.ShouldBe(UInts(1, 1, 7, 8));
             zone.Props.Select(p => p.Id).ShouldBe(new uint[] { 0x50011, 0x50008 });
-            zone.Props[1].Data.ShouldBe(UInts(3));
+            zone.Props[1].ShouldBeOfType<GtDataLayer>().Data.ShouldBe(UInts(3));
         }
 
         [TestMethod]
