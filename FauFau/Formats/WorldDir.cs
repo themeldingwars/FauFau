@@ -76,6 +76,24 @@ namespace FauFau.Formats
             }
         }
 
+        // Older builds (production up to 1780) embed the tiles in the .worldDir, later ones keep them in maps/worldmapchunks next to it
+        public WorldMap ReadTile(string worldDirPath, Tile tile)
+        {
+            WorldMap map = new WorldMap();
+            if (!Embedded)
+            {
+                map.Read(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(worldDirPath) ?? "", "worldmapchunks", tile.Name));
+                return map;
+            }
+
+            byte[] data = new byte[tile.DataLength];
+            using FileStream file = File.OpenRead(worldDirPath);
+            file.Position = tile.DataOffset;
+            file.ReadExactly(data);
+            map.Read(data);
+            return map;
+        }
+
         // The length includes the terminating NUL
         private static string ReadString(BinaryStream bs)
         {
@@ -102,6 +120,8 @@ namespace FauFau.Formats
             public float OriginX;
             public float OriginY;
             public float Size;
+
+            public (uint X, uint Y) Position => WorldMap.GetTilePosition(EntryId, ZoomLevel);
         }
     }
 }
