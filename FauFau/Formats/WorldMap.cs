@@ -99,6 +99,23 @@ namespace FauFau.Formats
             return new Layer { Id = bs.Read.UInt(), Length = bs.Read.UInt() };
         }
 
+        // The entry id is the quadtree path from the cube face down to the tile, two bits per level with the top level in the
+        // lowest bits. Bit 0 of each step is the X half, bit 1 the Y half, so a face has 2^zoom tiles per side.
+        public static (uint X, uint Y) GetTilePosition(uint entryId, uint zoomLevel)
+        {
+            uint x = 0;
+            uint y = 0;
+            for (int level = 0; level < zoomLevel; level++)
+            {
+                uint child = (entryId >> (2 * level)) & 3;
+                x = (x << 1) | (child & 1);
+                y = (y << 1) | (child >> 1);
+            }
+            return (x, y);
+        }
+
+        public (uint X, uint Y) TilePosition => GetTilePosition(EntryId, ZoomLevel);
+
         // Ids 10 and 11 are the diffuse and normal textures, 21 vertices, 31 and 41 indices
         public class Layer
         {

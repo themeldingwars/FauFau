@@ -89,6 +89,92 @@ namespace FauFau.Tests
             return stream.Read.ByteArray((int)stream.Length);
         }
 
+        // Like the .worldDir files of build 1694, the tile follows the directory and has no name
+        private static byte[] CreateEmbeddedWorldDir(byte[] tile)
+        {
+            const int headerLength = 8 + 22;
+            const int tileEntryLength = 8 + 61;
+
+            BinaryStream stream = new BinaryStream(new MemoryStream());
+            stream.Write.UInt(0);
+            stream.Write.UInt(22);
+            stream.Write.String("WMAP");
+            stream.Write.UInt(3);
+            stream.Write.UInt(1);
+            stream.Write.Byte(1);
+            WriteString(stream, "");
+            stream.Write.UInt(0);
+            stream.Write.UInt(100);
+            stream.Write.UInt(61);
+            WriteString(stream, "");
+            stream.Write.UInt(headerLength + tileEntryLength);
+            stream.Write.UInt((uint)tile.Length);
+            stream.Write.UInt(5);
+            stream.Write.UInt(7);
+            stream.Write.UInt(1074);
+            stream.Write.FloatArray(new float[] { -1, -2, -3, 1, 2, 3, -512, 256, 1024 });
+            stream.Write.ByteArray(tile);
+            stream.ByteOffset = 0;
+            return stream.Read.ByteArray((int)stream.Length);
+        }
+
+        [TestMethod]
+        [DataRow(4280U, 7U, 17U, 56U)]
+        [DataRow(37048U, 8U, 34U, 113U)]
+        [DataRow(3117240U, 11U, 278U, 911U)]
+        [DataRow(0U, 0U, 0U, 0U)]
+        public void GetTilePosition_DecodesQuadtreePath(uint entryId, uint zoomLevel, uint x, uint y)
+        {
+            WorldMap.GetTilePosition(entryId, zoomLevel).ShouldBe((x, y));
+        }
+
+        [TestMethod]
+        public void ReadTile_Embedded_ReadsTileFromDirectory()
+        {
+            string path = System.IO.Path.GetTempFileName();
+            try
+            {
+                File.WriteAllBytes(path, CreateEmbeddedWorldDir(CreateWorldMap(true)));
+                WorldDir dir = new WorldDir();
+                dir.Read(path);
+
+                WorldMap map = dir.ReadTile(path, dir.Tiles[0]);
+
+                dir.Embedded.ShouldBeTrue();
+                dir.Tiles[0].Position.ShouldBe((18U, 80U));
+                map.EntryId.ShouldBe(1074U);
+                map.Data.ShouldBe(Payload);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [TestMethod]
+        public void ReadTile_NotEmbedded_ReadsTileFromChunkFolder()
+        {
+            string folder = Directory.CreateTempSubdirectory().FullName;
+            try
+            {
+                string path = System.IO.Path.Combine(folder, "448.worldDir");
+                File.WriteAllBytes(path, CreateWorldDir());
+                Directory.CreateDirectory(System.IO.Path.Combine(folder, "worldmapchunks"));
+                File.WriteAllBytes(System.IO.Path.Combine(folder, "worldmapchunks", "0_07_0000001074_opt.worldMap"), CreateWorldMap(false));
+                WorldDir dir = new WorldDir();
+                dir.Read(path);
+
+                WorldMap map = dir.ReadTile(path, dir.Tiles[0]);
+
+                map.ZoomLevel.ShouldBe(7U);
+                map.Data.ShouldBe(Payload);
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+
         [TestMethod]
         [DataRow(false)]
         [DataRow(true)]
