@@ -225,5 +225,86 @@ namespace FauFau.Tests
             dir.Tiles[0].EntryId.ShouldBe(1074U);
             dir.Tiles[0].Size.ShouldBe(1024f);
         }
+
+        private static WorldMap.Layer CreateLayer(uint id, Action<BinaryStream> write)
+        {
+            BinaryStream stream = new BinaryStream(new MemoryStream());
+            write(stream);
+            stream.ByteOffset = 0;
+            byte[] data = stream.Read.ByteArray((int)stream.Length);
+            return new WorldMap.Layer { Id = id, Length = (uint)data.Length, Data = data };
+        }
+
+        [TestMethod]
+        public void GetDiffuseTexture_ReadsSquareTexture()
+        {
+            WorldMap map = new WorldMap();
+            map.Layers.Add(CreateLayer(WorldMap.DiffuseTextureLayerId, s =>
+            {
+                s.Write.Int(64);
+                s.Write.ByteArray(new byte[64]);
+            }));
+
+            WorldMap.Texture texture = map.GetDiffuseTexture();
+
+            texture.Width.ShouldBe(8);
+            texture.Height.ShouldBe(8);
+            texture.Data.Length.ShouldBe(64);
+            map.GetNormalTexture().ShouldBeNull();
+        }
+
+        [TestMethod]
+        public void GetDiffuseTexture_NotSquare_Throws()
+        {
+            WorldMap map = new WorldMap();
+            map.Layers.Add(CreateLayer(WorldMap.DiffuseTextureLayerId, s =>
+            {
+                s.Write.Int(48);
+                s.Write.ByteArray(new byte[48]);
+            }));
+
+            Action act = () => map.GetDiffuseTexture();
+
+            act.ShouldThrow<InvalidDataException>();
+        }
+
+        [TestMethod]
+        public void GetRoads_ReadsVerticesAlphaAndIndices()
+        {
+            WorldMap map = new WorldMap();
+            map.Layers.Add(CreateLayer(WorldMap.RoadsLayerId, s =>
+            {
+                s.Write.Int(3);
+                s.Write.FloatArray(new float[] { -0.5f, -309f, 559.5f, -29.5f, -314.5f, 567f, 1.25f, -324f, 559.5f });
+                s.Write.ByteArray(new byte[] { 255, 0, 128 });
+                s.Write.Int(3);
+                s.Write.UShort(0);
+                s.Write.UShort(1);
+                s.Write.UShort(2);
+            }));
+
+            WorldMap.RoadMesh roads = map.GetRoads();
+
+            roads.Positions.Length.ShouldBe(3);
+            roads.Positions[1].ShouldBe(new System.Numerics.Vector3(-29.5f, -314.5f, 567f));
+            roads.Alpha.ShouldBe(new byte[] { 255, 0, 128 });
+            roads.Indices.ShouldBe(new ushort[] { 0, 1, 2 });
+        }
+
+        [TestMethod]
+        public void GetRoads_EmptyLayer_ReturnsEmptyMesh()
+        {
+            WorldMap map = new WorldMap();
+            map.Layers.Add(CreateLayer(WorldMap.RoadsLayerId, s =>
+            {
+                s.Write.Int(0);
+                s.Write.Int(0);
+            }));
+
+            WorldMap.RoadMesh roads = map.GetRoads();
+
+            roads.Positions.ShouldBeEmpty();
+            roads.Indices.ShouldBeEmpty();
+        }
     }
 }

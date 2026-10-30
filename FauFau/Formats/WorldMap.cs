@@ -1,6 +1,7 @@
 using Bitter;
 using FauFau.Util.CommmonDataTypes;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -12,6 +13,13 @@ namespace FauFau.Formats
     {
         private const int GeneralLayerId = 0;
         private const int CompressedLayerId = 100;
+
+        public const uint DiffuseTextureLayerId = 10;
+        public const uint NormalTextureLayerId = 11;
+        public const uint VerticesLayerId = 21;
+        public const uint IndicesLayerId = 31;
+        public const uint PropsLayerId = 50;
+        public const uint RoadsLayerId = 61;
 
         public string Magic = "GTNO";
         public uint Version = 2;
@@ -116,12 +124,86 @@ namespace FauFau.Formats
 
         public (uint X, uint Y) TilePosition => GetTilePosition(EntryId, ZoomLevel);
 
+        // DXT5, the top-down view of the tile that the client puts on the tile mesh
+        public Texture GetDiffuseTexture() => ReadTexture(DiffuseTextureLayerId);
+
+        // DXT5 with X in alpha and Y in green
+        public Texture GetNormalTexture() => ReadTexture(NormalTextureLayerId);
+
+        private Texture ReadTexture(uint layerId)
+        {
+            Layer layer = Layers.Find(l => l.Id == layerId);
+            if (layer == null)
+            {
+                return null;
+            }
+
+            int length = BinaryPrimitives.ReadInt32LittleEndian(layer.Data);
+            if (length > layer.Data.Length - 4)
+            {
+                throw new InvalidDataException($"The texture of layer {layerId} is cut off");
+            }
+
+            // Square and DXT5, so one byte per pixel
+            int size = (int)Math.Sqrt(length);
+            if (size * size != length)
+            {
+                throw new InvalidDataException($"The texture of layer {layerId} isn't square, it has {length} bytes");
+            }
+
+            return new Texture { Width = size, Height = size, Data = layer.Data.AsSpan(4, length).ToArray() };
+        }
+
+        public RoadMesh GetRoads()
+        {
+            Layer layer = Layers.Find(l => l.Id == RoadsLayerId);
+            if (layer == null)
+            {
+                return null;
+            }
+
+            using BinaryStream bs = new BinaryStream(new MemoryStream(layer.Data));
+            RoadMesh roads = new RoadMesh();
+            int vertexCount = bs.Read.Int();
+            roads.Positions = new System.Numerics.Vector3[vertexCount];
+            for (int i = 0; i < vertexCount; i++)
+            {
+                roads.Positions[i] = new System.Numerics.Vector3(bs.Read.Float(), bs.Read.Float(), bs.Read.Float());
+            }
+            roads.Alpha = bs.Read.ByteArray(vertexCount);
+
+            int indexCount = bs.Read.Int();
+            roads.Indices = new ushort[indexCount];
+            for (int i = 0; i < indexCount; i++)
+            {
+                roads.Indices[i] = bs.Read.UShort();
+            }
+            return roads;
+        }
+
         // Ids 10 and 11 are the diffuse and normal textures, 21 vertices, 31 and 41 indices
         public class Layer
         {
             public uint Id;
             public uint Length;
             public byte[] Data;
+        }
+
+        public class Texture
+        {
+            public int Width;
+            public int Height;
+            public byte[] Data;
+        }
+
+        // Triangles along the roads, 7 or 15 m wide in build 1962. The alpha runs across a road, 255 on one side and 0 on the
+        // other, 128 at junctions. The client draws the roads white.
+        public class RoadMesh
+        {
+            // Relative to the tile center like the tile mesh, Z is the height
+            public System.Numerics.Vector3[] Positions = Array.Empty<System.Numerics.Vector3>();
+            public byte[] Alpha = Array.Empty<byte>();
+            public ushort[] Indices = Array.Empty<ushort>();
         }
     }
 }
